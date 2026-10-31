@@ -42,7 +42,7 @@ GREEN=$'\033[0;32m'
 LIGHTCYAN=$'\033[1;36m'
 NC=$'\033[0m'
 
-devinst=0
+install_own_source=0
 
 # Für künftige git clone Funktion
 #download_via_git_clone() {
@@ -106,7 +106,7 @@ select_source_dir() {
         # --- Automatic developer download ---
         if echo "$answer" | grep -iq "^y" ; then
             download_source
-            devinst=0
+            install_own_source=0
             return
         fi
 
@@ -154,7 +154,7 @@ select_source_dir() {
                         fi
 
                         cd "$pfad"
-                        devinst=1
+                        install_own_source=1
                         return
                     fi
                 fi
@@ -194,13 +194,13 @@ install_debian() {
     if [ "$MAJOR" -gt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 10 ]; }; then
         echo "${GREEN}Python $PYVER detected (>= 3.10)."
         echo "Developer version of dxf2gcode will be installed.${NC}"
-        devinst=1
+        install_own_source=1
     fi
 
     set -e
 
     echo "${LIGHTCYAN}Do you want install..."
-    if [ $devinst -eq 0 ] ;then
+    if [ $install_own_source -eq 0 ] ;then
         echo "1   ...the latest stable version"
         echo "2   ...a developer version"
         echo "3   Quit installer${NC}"
@@ -282,7 +282,9 @@ install_debian() {
     $pyversion -m venv .venv
     source .venv/bin/activate
 
-    cd "$pfad/source"
+    # Sucht nach der pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
+    BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
+    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit 1; }
 
     echo
     echo "${GREEN}Install pip, setuptools, wheel, build, PyQt...${NC}"
@@ -352,8 +354,9 @@ install_arch() {
     $pyversion -m venv .venv
     source .venv/bin/activate
 
-    # In den Quellordner wechseln
-    cd "$pfad/source"
+    # Sucht die pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
+    BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
+    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit 1; }
 
     # Python Build-Abhängigkeiten in der venv installieren
     echo
@@ -432,29 +435,40 @@ fi
 
 # Ordner ins Home-Verzeichnis verschieben
 echo
-echo "${GREEN}Move the dxf2gcode folder to the HOME directory...${NC}"
+echo "${GREEN}Copy $pfad to the HOME directory...${NC}"
 sudo rm -rf "$HOME/dxf2gcode"
-mv "$pfad" "$HOME/dxf2gcode"
+cp -r "$pfad" "$HOME/dxf2gcode"
 
 # Shebang anpassen
 echo
 echo "${GREEN}Adjust the shebang...${NC}"
-sed -i "1s|.*|#!$HOME/dxf2gcode/.venv/bin/python|" "$HOME/dxf2gcode/.venv/bin/dxf2gcode"
-
-ICON_FILE="$HOME/DXF2GCODE.ico"
-
-if [ ! -f "$ICON_FILE" ]; then
-    echo "${GREEN}Downloading icon…${NC}"
-    wget -O "$ICON_FILE" "$ICON_URL"
+EXEC_FILE=$(find "$HOME/dxf2gcode/.venv/bin" -type f -name "dxf2gcode" | head -n 1)
+if [ -n "$EXEC_FILE" ]; then
+    sed -i "1s|.*|#!$HOME/dxf2gcode/.venv/bin/python|" "$EXEC_FILE"
+else
+    echo "${RED}Warning: Executable dxf2gcode not found in .venv/bin!${NC}"
 fi
 
-if [ $devinst -eq 1 ] ;then
+# source löschen?
+if [ $install_own_source -eq 1 ] ;then
     echo
     echo "${LIGHTCYAN}Should I delete the "$pfad" directory (y/N)?${NC}"
     read answer
     if echo "$answer" | grep -iq "^y" ;then
         sudo rm -rf $pfad
     fi
+else
+    echo
+    echo "${GREEN}Remove $TMPDIR...${NC}"
+    sudo rm -rf "$TMPDIR"
+fi
+
+ICON_FILE="$HOME/DXF2GCODE.ico"
+
+if [ ! -f "$ICON_FILE" ]; then
+    echo
+    echo "${GREEN}Downloading icon…${NC}"
+    wget -O "$ICON_FILE" "$ICON_URL"
 fi
 
 # Alten Starter löschen
