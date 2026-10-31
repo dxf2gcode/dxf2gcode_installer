@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.0 #"
+echo "# dxf2gcode Install Script V6.2 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -15,7 +15,7 @@ echo ""
 
 STABLE_SOURCE_URL="https://sourceforge.net/projects/dxf2gcode/files/dxf2gcode-20220226_RC1.zip/download"
 
-DEV_URL="https://sourceforge.net/code-snapshots/git/d/dx/dxf2gcode/sourcecode.git/dxf2gcode-sourcecode-11a14d4443919a4755d0f37686bd9d1a3c967951.zip"
+DEV_URL="https://sourceforge.net/code-snapshots/git/d/dx/dxf2gcode/sourcecode.git/dxf2gcode-sourcecode-6772cd770273130fee1e636fb1a0a164182ab3c4.zip"
 #DEV_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/dxf2gcode.zip/download"
 
 GITHUB_URL="https://github.com/ltspicer/dxf2gcode_dev/archive/master.zip"
@@ -35,12 +35,58 @@ MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
 MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
 PYDIR="/usr/lib/python${MAJOR}.${MINOR}"
 
-TMPDIR=$(mktemp -d)
-
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 LIGHTCYAN=$'\033[1;36m'
 NC=$'\033[0m'
+
+if [ "$(id -u)" -eq 0 ]; then
+    echo "${RED}This script must NOT be executed as root or via sudo!${NC}"
+    echo
+    exit 1
+fi
+
+if [ -d "$HOME/dxf2gcode" ]; then
+    echo "${LIGHTCYAN}$HOME/dxf2gcode directory exists."
+    
+    while true; do
+        echo "o = Overwrite, r = Rename, q = Quit${NC}"
+
+        read -n 1 -r choice
+        echo ""
+
+        case "$choice" in
+            [Oo])
+                echo "Overwrite selected. Existing directory will be deleted..."
+                sudo rm -rf "$HOME/dxf2gcode"
+                break
+                ;;
+            [Rr])
+                while true; do
+                    echo "Rename selected. Please enter a new name for the old installation (instead of dxf2gcode):"
+                    read -r new_name
+                    
+                    if [ -z "$new_name" ] || [ "$new_name" = "dxf2gcode" ]; then
+                        echo "${RED}Error: The name cannot be empty or identical!${NC}"
+                    else
+                        mv "$HOME/dxf2gcode" "$HOME/$new_name"
+                        break 2
+                    fi
+                done
+                ;;
+
+            [Qq])
+                echo "Abort."
+                exit 0
+                ;;
+            *)
+                echo "Invalid input. Please press o, r, or q."
+                ;;
+        esac
+    done
+fi
+
+mkdir "$HOME/dxf2gcode"
 
 install_own_source=0
 
@@ -49,7 +95,7 @@ install_own_source=0
 #    local url="$1"
 #    local unused_outfile="$2"
 #
-#    local target_dir="$TMPDIR/dxf2gcode-sourcecode"
+#    local target_dir="$HOME/dxf2gcode/dxf2gcode-sourcecode"
 #
 #    echo -e "${GREEN}Cloning via Git: $url${NC}"
 #    # Klonen direkt in den Unterordner 'source'
@@ -57,27 +103,58 @@ install_own_source=0
 #}
 
 download_zip() {
+    TMPDIR=$(mktemp -d)
     local url="$1"
-    local outfile="$2"
+    local outdir="$2"
 
     echo "${GREEN}Downloading: $url${NC}"
-    wget -O "$outfile" "$url"
-    unzip "$outfile" -d "$TMPDIR"
-    rm "$outfile"
+
+    if ! wget -L -O "$TMPDIR/dev.zip" "$url"; then
+        echo
+        echo "${RED}Error: Download failed (e.g., 404 Not Found or no connection).${NC}"
+        # Temporäres Verzeichnis löschen
+        rm -rf "$TMPDIR"
+        exit 1
+    fi
+
+    # Überprüfung, ob die Datei existiert und nicht leer ist
+    if [ ! -s "$TMPDIR/dev.zip" ]; then
+        echo "${RED}Error: The downloaded file is empty or does not exist.${NC}"
+        rm -rf "$TMPDIR"
+        exit 1
+    fi
+
+    # Entpacken
+    echo "${GREEN}Unpack file to $outdir...${NC}"
+    if ! unzip "$TMPDIR/dev.zip" -d "$outdir"; then
+        echo "${RED}Error: Could not extract file. Not a valid ZIP file.${NC}"
+        rm -rf "$TMPDIR"
+        exit 1
+    fi
+
+    #echo
+    #echo "TMP directory: $TMPDIR, Content:"
+    #ls "$TMPDIR"
+    echo
+    echo "Output directory: $outdir, Content:"
+    ls "$outdir"
+    echo
+
+    rm -rf "$TMPDIR"
 }
 
 download_source() {
     if $sourceforge ; then
         echo "${GREEN}Download from SOURCEFORGE${NC}"
-        download_zip "$DEV_URL" "$TMPDIR/dev.zip"
+        download_zip "$DEV_URL" "$HOME/dxf2gcode"
     else
         echo "${GREEN}Download from GITHUB${NC}"
-        download_zip "$GITHUB_URL" "$TMPDIR/master.zip"
+        download_zip "$GITHUB_URL" "$HOME/dxf2gcode"
         echo "${GREEN}Downloading icon…${NC}"
         wget -O ${HOME}/DXF2GCODE.ico https://raw.githubusercontent.com/ltspicer/dxf2gcode.linux.installer/main/DXF2GCODE.ico
     fi
 
-    pfad=$(find_deepest_dxf2gcode_dir "$TMPDIR")
+    pfad=$(find_deepest_dxf2gcode_dir "$HOME/dxf2gcode")
     cd "$pfad" || { echo "${RED}Error: Could not change to directory $pfad ${NC}"; exit 1; }
 
     echo "${GREEN}Current folder: $(pwd)${NC}"
@@ -101,7 +178,7 @@ select_source_dir() {
     echo "If you want install your own version press n${NC}"
 
     while true; do
-        read answer
+        read -n 1 -r answer
 
         # --- Automatic developer download ---
         if echo "$answer" | grep -iq "^y" ; then
@@ -134,7 +211,7 @@ select_source_dir() {
 
                 echo "${GREEN}I will work in the directory $pfad"
                 echo "${LIGHTCYAN}Is that correct (y/n/q)? (q = Quit installer)${NC}"
-                read answer
+                read -n 1 -r answer
 
                 if echo "$answer" | grep -iq "^q" ; then
                     exit
@@ -197,7 +274,7 @@ install_debian() {
         install_own_source=1
     fi
 
-    set -e
+    #set -e
 
     echo "${LIGHTCYAN}Do you want install..."
     if [ $install_own_source -eq 0 ] ;then
@@ -205,7 +282,7 @@ install_debian() {
         echo "2   ...a developer version"
         echo "3   Quit installer${NC}"
         while true; do
-            read answer
+            read -n 1 -r answer
             if echo "$answer" | grep -iq "^3" ;then
                 exit
             fi
@@ -220,7 +297,7 @@ install_debian() {
         echo "${LIGHTCYAN}2   ...a developer version"
         echo "3   Quit installer${NC}"
         while true; do
-            read answer
+            read -n 1 -r answer
             if echo "$answer" | grep -iq "^3" ;then
                 exit
             fi
@@ -233,32 +310,34 @@ install_debian() {
     echo
     echo "${LIGHTCYAN}I will now install. Are you ready (y/n)?${NC}"
     while true; do
-        read answer
+        read -n 1 -r answer
         if echo "$answer" | grep -iq "^y" ;then
             echo ""
             break
         fi
         if echo "$answer" | grep -iq "^n" ;then
-            sudo rm -rf $TMPDIR
+            sudo rm -rf "$HOME/dxf2gcode"
             exit
         fi
     done
 
-    set +e
+    #set +e
 
     echo "${GREEN}Update system...${NC}"
     sudo $aptversion update
     sudo $aptversion install -y git
+    sudo $aptversion install -y wget
+    sudo $aptversion install -y unzip
     echo
 
-    echo "${GREEN}Remove orphaned packages...${NC}"
-    sudo $aptversion autoremove -y
-    echo
+#    echo "${GREEN}Remove orphaned packages...${NC}"
+#    sudo $aptversion autoremove -y
+#    echo
 
     if echo "$answer" | grep -iq "^1" ; then
         echo "${GREEN}Download the latest stable...${NC}"
-        download_zip "$STABLE_SOURCE_URL" "$TMPDIR/dxf.zip"
-        pfad=$(find_deepest_dxf2gcode_dir "$TMPDIR")
+        download_zip "$STABLE_SOURCE_URL" "$HOME/dxf2gcode"
+        pfad=$(find_deepest_dxf2gcode_dir "$HOME/dxf2gcode")
         cd "$pfad"
 
     else
@@ -271,20 +350,30 @@ install_debian() {
     echo
 
     sudo $aptversion install -y python3-venv
-    sudo $aptversion install -y qt6-base-dev qt6-tools-dev pyqt5-dev-tools pyqt6-dev-tools libxcb-cursor0
+    sudo $aptversion install -y qt6-base-dev
+    sudo $aptversion install -y qt6-tools-dev
+    sudo $aptversion install -y pyqt5-dev-tools
+    sudo $aptversion install -y pyqt6-dev-tools
+    sudo $aptversion install -y libxcb-cursor0
 
     # Qt6-Tools in den Pfad aufnehmen (wichtig für Debian/Ubuntu)
     export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
 
-    # Virtuelle Umgebung aktivieren
-    echo
-    echo "${GREEN}Activate virtual environment...${NC}"
-    $pyversion -m venv .venv
-    source .venv/bin/activate
-
     # Sucht nach der pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
     BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
     cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit 1; }
+
+    echo
+    echo "BUILD_DIR: $BUILD_DIR, Current directory:"
+    pwd
+    echo
+
+    # Virtuelle Umgebung erstellen und aktivieren
+    echo
+    echo "${GREEN}Activate virtual environment...${NC}"
+
+    $pyversion -m venv .venv
+    source .venv/bin/activate
 
     echo
     echo "${GREEN}Install pip, setuptools, wheel, build, PyQt...${NC}"
@@ -298,6 +387,7 @@ install_debian() {
 
     echo
     echo "${GREEN}Build language files...${NC}"
+
     # Ordner für generierte Dateien erstellen
     mkdir -p dxf2gcode/presentation/qt/generated i18n
 
@@ -348,15 +438,15 @@ install_arch() {
         exit 1
     fi
 
-    # Virtuelle Umgebung im temporären Verzeichnis erstellen und aktivieren
+    # Sucht die pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
+    BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
+    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit 1; }
+
+    # Virtuelle Umgebung erstellen und aktivieren
     echo
     echo "${GREEN}Activate virtual environment...${NC}"
     $pyversion -m venv .venv
     source .venv/bin/activate
-
-    # Sucht die pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
-    BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
-    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit 1; }
 
     # Python Build-Abhängigkeiten in der venv installieren
     echo
@@ -428,42 +518,39 @@ case "$OS" in
 esac
 
 # venv verlassen und aus dem temporären Ordner herauswechseln
-cd "$HOME"
-if [ "$(type -t deactivate)" = "function" ]; then
-    deactivate
-fi
+#cd "$HOME"
+#if [ "$(type -t deactivate)" = "function" ]; then
+#    deactivate
+#fi
 
 # Ordner ins Home-Verzeichnis verschieben
-echo
-echo "${GREEN}Copy $pfad to the HOME directory...${NC}"
-sudo rm -rf "$HOME/dxf2gcode"
-cp -r "$pfad" "$HOME/dxf2gcode"
+#echo
+#echo "${GREEN}Copy $pfad to the HOME directory...${NC}"
+#sudo rm -rf "$HOME/dxf2gcode"
+#cp -r "$pfad" "$HOME/dxf2gcode"
 
 # Shebang anpassen
-echo
-echo "${GREEN}Adjust the shebang...${NC}"
-EXEC_FILE=$(find "$HOME/dxf2gcode/.venv/bin" -type f -name "dxf2gcode" | head -n 1)
-if [ -n "$EXEC_FILE" ]; then
-    sed -i "1s|.*|#!$HOME/dxf2gcode/.venv/bin/python|" "$EXEC_FILE"
-else
-    echo "${RED}Warning: Executable dxf2gcode not found in .venv/bin!${NC}"
-fi
+#echo
+#echo "${GREEN}Adjust the shebang...${NC}"
+#EXEC_FILE=$(find "$HOME/dxf2gcode/.venv/bin" -type f -name "dxf2gcode" | head -n 1)
+#if [ -n "$EXEC_FILE" ]; then
+#    sed -i "1s|.*|#!$HOME/dxf2gcode/.venv/bin/python|" "$EXEC_FILE"
+#else
+#    echo "${RED}Warning: Executable dxf2gcode not found in .venv/bin!${NC}"
+#fi
 
 # source löschen?
 if [ $install_own_source -eq 1 ] ;then
     echo
     echo "${LIGHTCYAN}Should I delete the "$pfad" directory (y/N)?${NC}"
-    read answer
+    read -n 1 -r answer
     if echo "$answer" | grep -iq "^y" ;then
         sudo rm -rf $pfad
     fi
-else
-    echo
-    echo "${GREEN}Remove $TMPDIR...${NC}"
-    sudo rm -rf "$TMPDIR"
 fi
 
-ICON_FILE="$HOME/DXF2GCODE.ico"
+#ICON_FILE="$HOME/DXF2GCODE.ico"
+ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
 
 if [ ! -f "$ICON_FILE" ]; then
     echo
@@ -476,15 +563,25 @@ echo
 echo "${GREEN}Build the dxf2gcode.sh starter script in HOME directory...${NC}"
 rm -f $HOME/dxf2gcode.sh
 
-# Starter im $HOME-Verzeichnis erstellen
-cat << 'EOF' > "$HOME/dxf2gcode.sh"
+# Absoluten Pfad zur ausführbaren dxf2gcode-Datei in der .venv ermitteln
+REAL_EXEC_PATH=$(find "$HOME/dxf2gcode" -type f -path "*/.venv/bin/dxf2gcode" | head -n 1)
+
+# Fallback
+if [ -z "$REAL_EXEC_PATH" ]; then
+    REAL_EXEC_PATH=$(find "$HOME/dxf2gcode" -type f -name "dxf2gcode" | head -n 1)
+fi
+
+echo "${GREEN}Determined binary path for starter: $REAL_EXEC_PATH${NC}"
+
+# Starter im HOME-Verzeichnis erstellen
+cat << EOF > "$HOME/dxf2gcode.sh"
 #!/bin/bash
 # dxf2gcode.sh
-# Startet dxf2gcode direkt aus seiner virtuellen Umgebung
+# Launches dxf2gcode directly from its virtual environment
 
-# Führt das Programm mit dem Python-Interpreter der venv aus
-# und reicht alle übergebenen Argumente ("$@") weiter
-exec "$HOME/dxf2gcode/.venv/bin/dxf2gcode" "$@"
+# Run the program using the Python interpreter from the venv
+# and passes on all provided arguments ("$@")
+exec "$REAL_EXEC_PATH" "\$@"
 EOF
 
 # Starter ausführbar machen
@@ -495,7 +592,7 @@ echo "${LIGHTCYAN}dxf2gcode was successfully installed.${NC}"
 echo
 echo "You can start it now with ${GREEN}~/dxf2gcode.sh${NC} in the console."
 echo "If you want, you can create a starter on the desktop. Use command ${GREEN}$HOME/dxf2gcode.sh %f${NC} inside the starter."
-echo "The icon for the starter is stored at: ${GREEN}"${HOME}/DXF2GCODE.ico"${NC}"
+echo "The icon for the starter is stored at: ${GREEN}$ICON_FILE${NC}"
 echo
 echo "${LIGHTCYAN}To uninstall, simply delete the ${GREEN}$HOME/dxf2gcode${LIGHTCYAN} directory.${NC}"
 echo
