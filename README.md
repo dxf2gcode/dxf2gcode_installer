@@ -1,4 +1,4 @@
-# This repo is only for the install.sh script!
+# This repo is only for tests with install.sh script!
 
 # DXF2GCODE source package
 
