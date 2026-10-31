@@ -482,5 +482,7 @@ echo
 echo "You can start it now with ${GREEN}~/dxf2gcode.sh${NC} in the console."
 echo "If you want, you can create a starter on the desktop. Use command ${GREEN}~/dxf2gcode.sh %f${NC} inside the starter."
 echo "The icon for the starter is stored at: ${GREEN}"${HOME}/DXF2GCODE.ico"${NC}"
+echo
+echo "${LIGHTCYAN}To uninstall, simply delete the ${GREEN}$HOME/dxf2gcode${LIGHTCYAN} directory.${NC}"
 
 exit 0
