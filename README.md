@@ -1,3 +1,5 @@
+# This repo is only for the install.sh script!
+
 # DXF2GCODE source package
 
 This directory contains the Python application, its packaging and translation
