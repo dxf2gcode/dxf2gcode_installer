@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.4 #"
+echo "# dxf2gcode Install Script V6.5 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -14,16 +14,14 @@ echo ""
 echo ""
 
 # URLs
-STABLE_SOURCE_URL="https://sourceforge.net/projects/dxf2gcode/files/dxf2gcode-20220226_RC1.zip/download"
+#STABLE_SOURCE_URL="https://sourceforge.net/projects/dxf2gcode/files/dxf2gcode-20220226_RC1.zip/download"
 
-DEV_URL="https://sourceforge.net/code-snapshots/git/d/dx/dxf2gcode/sourcecode.git/dxf2gcode-sourcecode-6772cd770273130fee1e636fb1a0a164182ab3c4.zip"
-#DEV_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/dxf2gcode.zip/download"
+SOURCEFORGE_DEV_URL="https://sourceforge.net/code-snapshots/git/d/dx/dxf2gcode/sourcecode.git/dxf2gcode-sourcecode-6772cd770273130fee1e636fb1a0a164182ab3c4.zip"
+#SOURCEFORGE_DEV_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/dxf2gcode.zip/download"
 
-GITHUB_URL="https://github.com/dxf2gcode/dxf2gcode/archive/master.zip"
-#GITHUB_URL="https://github.com/ltspicer/dxf2gcode_dev/archive/master.zip"
-#GITHUB_URL="https://github.com/ltspicer/dxf2gcode/archive/master.zip"
+GITHUB_DEV_URL="https://github.com/dxf2gcode/dxf2gcode/archive/master.zip"
 
-ICON_URL="https://raw.github.com/dxf2gcode/dxf2gcode_installer/main/dxf2gcode-d2g-symbol-v5-512.png"
+ICON_URL="https://raw.github.com/dxf2gcode/dxf2gcode_installer/main/dxf2gcode_symbol.png"
 #ICON_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/DXF2GCODE.ico/download"
 ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.png"
 #ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
@@ -50,6 +48,7 @@ exit_restore() {
     rm -rf "$HOME/dxf2gcode"
     set -e
     if [ -d "$BACKUP_TMPDIR/dxf2gcode" ]; then
+        echo "${GREEN}Restoring $BACKUP_TMPDIR/dxf2gcode...${NC}"
         mv "$BACKUP_TMPDIR/dxf2gcode" "$HOME/dxf2gcode"
     fi
     rm -rf "$BACKUP_TMPDIR"
@@ -95,10 +94,10 @@ if [ -d "$HOME/dxf2gcode" ]; then
     echo "${LIGHTCYAN}$HOME/dxf2gcode directory exists."
     
     while true; do
-        echo "o = Overwrite, r = Rename, q = Quit${NC}"
+        echo "o = Overwrite, r = Rename, q = Quit installer${NC}"
 
         read -n 1 -r choice
-        echo ""
+        echo
 
         case "$choice" in
             [Oo])
@@ -109,8 +108,11 @@ if [ -d "$HOME/dxf2gcode" ]; then
                 ;;
             [Rr])
                 while true; do
+                    cp -a "$HOME/dxf2gcode" "$BACKUP_TMPDIR/"
+
                     echo "Rename selected. Please enter a new name for the old installation (instead of dxf2gcode. Eg. dxf2gcode.bak):"
                     read -r new_name
+                    echo
 
                     if [ -e "$HOME/$new_name" ]; then
                         echo "${RED}Error: That name already exists!${NC}"
@@ -196,10 +198,10 @@ download_zip() {
 download_source() {
     if $sourceforge ; then
         echo "${GREEN}Download from SOURCEFORGE${NC}"
-        download_zip "$DEV_URL" "$HOME/dxf2gcode"
+        download_zip "$SOURCEFORGE_DEV_URL" "$HOME/dxf2gcode"
     else
         echo "${GREEN}Download from GITHUB${NC}"
-        download_zip "$GITHUB_URL" "$HOME/dxf2gcode"
+        download_zip "$GITHUB_DEV_URL" "$HOME/dxf2gcode"
         #echo "${GREEN}Downloading icon…${NC}"
         #wget -O "$ICON_FILE" "$ICON_URL"
     fi
@@ -225,10 +227,17 @@ find_deepest_dxf2gcode_dir() {
 
 select_source_dir() {
     echo "${LIGHTCYAN}If you want automatically download the developer version press y"
-    echo "If you want install your own version press n${NC}"
+    echo "If you want install your own version press n"
+    echo "q = Quit installer${NC}"
 
     while true; do
         read -n 1 -r answer
+        echo
+
+        # Quit installer
+        if echo "$answer" | grep -iq "^q" ; then
+            exit_restore
+        fi
 
         # --- Automatic developer download ---
         if echo "$answer" | grep -iq "^y" ; then
@@ -251,6 +260,7 @@ select_source_dir() {
             while true; do
                 echo "${LIGHTCYAN}Enter path to the dxf2gcode source in your home directory e.g. ${GREEN}Downloads/source ${RED}(without / at the beginning and end!) ${NC}"
                 read SRC
+                echo
 
                 [ -z "$SRC" ] && SRC="_"
                 if echo "$SRC" | grep -iq "^q" ; then
@@ -262,6 +272,7 @@ select_source_dir() {
                 echo "${GREEN}I will work in the directory $pfad"
                 echo "${LIGHTCYAN}Is that correct (y/n/q)? (q = Quit installer)${NC}"
                 read -n 1 -r answer
+                echo
 
                 if echo "$answer" | grep -iq "^q" ; then
                     exit_restore
@@ -315,6 +326,7 @@ install_debian() {
     #    echo "3   Quit installer${NC}"
     #    while true; do
     #        read -n 1 -r answer
+    #        echo
     #        if echo "$answer" | grep -iq "^3" ;then
     #            exit_restore
     #        fi
@@ -330,6 +342,7 @@ install_debian() {
     #    echo "3   Quit installer${NC}"
     #    while true; do
     #        read -n 1 -r answer
+    #        echo
     #        if echo "$answer" | grep -iq "^3" ;then
     #            exit_restore
     #        fi
@@ -340,9 +353,10 @@ install_debian() {
     #fi
 
     echo
-    echo "${LIGHTCYAN}Ready to install? (y = Yes / q = Quit)?${NC}"
+    echo "${LIGHTCYAN}Ready to install? (y = Yes / q = Quit installer)?${NC}"
     while true; do
         read -n 1 -r answer
+        echo
         if echo "$answer" | grep -iq "^y" ;then
             echo ""
             break
@@ -581,6 +595,7 @@ esac
 #    echo
 #    echo "${LIGHTCYAN}Should I delete the "$pfad" directory (y/N)?${NC}"
 #    read -n 1 -r answer
+#    echo
 #    if echo "$answer" | grep -iq "^y" ;then
 #        sudo rm -rf "$pfad"
 #    fi
@@ -590,7 +605,11 @@ esac
 if [ ! -f "$ICON_FILE" ]; then
     echo
     echo "${GREEN}Downloading icon…${NC}"
-    wget -O "$ICON_FILE" "$ICON_URL"
+    if ! wget -O "$ICON_FILE" "$ICON_URL"; then
+        echo
+        echo "${RED}Error: Download failed (e.g., 404 Not Found or no connection).${NC}"
+        exit_restore
+    fi
 fi
 
 # Starter
