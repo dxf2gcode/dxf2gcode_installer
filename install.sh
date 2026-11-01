@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.2 #"
+echo "# dxf2gcode Install Script V6.3 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -13,6 +13,7 @@ echo "Support: https://www.ltspiceusers.ch/#dxf2gcode.68"
 echo ""
 echo ""
 
+# URLs
 STABLE_SOURCE_URL="https://sourceforge.net/projects/dxf2gcode/files/dxf2gcode-20220226_RC1.zip/download"
 
 DEV_URL="https://sourceforge.net/code-snapshots/git/d/dx/dxf2gcode/sourcecode.git/dxf2gcode-sourcecode-6772cd770273130fee1e636fb1a0a164182ab3c4.zip"
@@ -23,30 +24,40 @@ GITHUB_URL="https://github.com/dxf2gcode/dxf2gcode/archive/master.zip"
 #GITHUB_URL="https://github.com/ltspicer/dxf2gcode/archive/master.zip"
 
 ICON_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/DXF2GCODE.ico/download"
+ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
 
 sourceforge=false       # Download from github: false | Download from sourceforge: true
 pipversion="pip3"       # pip command syntax
 pyversion="python3"     # If python-is-python3 is installed, change to "python"
 aptversion="apt-get"    # Old style = apt-get | New style = apt
 
+STARTER_FILE="$HOME/dxf2gcode.sh"
+
 #### Do not make any changes from here!
 
+# Python betreffendes
 PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
 MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
 PYDIR="/usr/lib/python${MAJOR}.${MINOR}"
 
+REQUIRED_MAJOR=3
+REQUIRED_MINOR=9
+
+# Farben Konsole
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 LIGHTCYAN=$'\033[1;36m'
 NC=$'\033[0m'
 
+# Nicht als root Überprüfung
 if [ "$(id -u)" -eq 0 ]; then
     echo "${RED}This script must NOT be executed as root or via sudo!${NC}"
     echo
     exit 1
 fi
 
+# Aktion bei existierender Installation
 if [ -d "$HOME/dxf2gcode" ]; then
     echo "${LIGHTCYAN}$HOME/dxf2gcode directory exists."
     
@@ -86,6 +97,8 @@ if [ -d "$HOME/dxf2gcode" ]; then
         esac
     done
 fi
+
+# Installations Routine
 
 mkdir "$HOME/dxf2gcode"
 
@@ -242,9 +255,6 @@ select_source_dir() {
 }
 
 check_python_version() {    # Python version >= 3.9 ?
-    REQUIRED_MAJOR=3
-    REQUIRED_MINOR=9
-
     if [ "$MAJOR" -lt "$REQUIRED_MAJOR" ] || { [ "$MAJOR" -eq "$REQUIRED_MAJOR" ] && [ "$MINOR" -lt "$REQUIRED_MINOR" ]; }; then
         echo "${RED}Error: Python ${REQUIRED_MAJOR}.${REQUIRED_MINOR} or higher is required (found $PYVER)."
         echo "Please install a modern Python version.${NC}"
@@ -269,54 +279,55 @@ install_debian() {
 
     # Must be developer version if Python >= 3.10
 
-    if [ "$MAJOR" -gt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 10 ]; }; then
-        echo "${GREEN}Python $PYVER detected (>= 3.10)."
-        echo "Developer version of dxf2gcode will be installed.${NC}"
-        install_own_source=1
-    fi
+    #if [ "$MAJOR" -gt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 10 ]; }; then
+    #    echo "${GREEN}Python $PYVER detected (>= 3.10)."
+    #    echo "Developer version of dxf2gcode will be installed.${NC}"
+    #    install_own_source=1
+    #fi
 
     #set -e
 
-    echo "${LIGHTCYAN}Do you want install..."
-    if [ $install_own_source -eq 0 ] ;then
-        echo "1   ...the latest stable version"
-        echo "2   ...a developer version"
-        echo "3   Quit installer${NC}"
-        while true; do
-            read -n 1 -r answer
-            if echo "$answer" | grep -iq "^3" ;then
-                exit
-            fi
-            if echo "$answer" | grep -iq "^1" ;then
-                break
-            fi
-            if echo "$answer" | grep -iq "^2" ;then
-                break
-            fi
-        done
-    else
-        echo "${LIGHTCYAN}2   ...a developer version"
-        echo "3   Quit installer${NC}"
-        while true; do
-            read -n 1 -r answer
-            if echo "$answer" | grep -iq "^3" ;then
-                exit
-            fi
-            if echo "$answer" | grep -iq "^2" ;then
-                break
-            fi
-        done
-    fi
+    # Immer dev Version installieren!
+    #echo "${LIGHTCYAN}Do you want install..."
+    #if [ $install_own_source -eq 0 ] ;then
+    #    echo "1   ...the latest stable version"
+    #    echo "2   ...a developer version"
+    #    echo "3   Quit installer${NC}"
+    #    while true; do
+    #        read -n 1 -r answer
+    #        if echo "$answer" | grep -iq "^3" ;then
+    #            exit
+    #        fi
+    #        if echo "$answer" | grep -iq "^1" ;then
+    #            break
+    #        fi
+    #        if echo "$answer" | grep -iq "^2" ;then
+    #            break
+    #        fi
+    #    done
+    #else
+    #    echo "${LIGHTCYAN}2   ...a developer version"
+    #    echo "3   Quit installer${NC}"
+    #    while true; do
+    #        read -n 1 -r answer
+    #        if echo "$answer" | grep -iq "^3" ;then
+    #            exit
+    #        fi
+    #        if echo "$answer" | grep -iq "^2" ;then
+    #            break
+    #        fi
+    #    done
+    #fi
 
     echo
-    echo "${LIGHTCYAN}I will now install. Are you ready (y/n)?${NC}"
+    echo "${LIGHTCYAN}Ready to install? (y = Yes / q = Quit)?${NC}"
     while true; do
         read -n 1 -r answer
         if echo "$answer" | grep -iq "^y" ;then
             echo ""
             break
         fi
-        if echo "$answer" | grep -iq "^n" ;then
+        if echo "$answer" | grep -iq "^q" ;then
             sudo rm -rf "$HOME/dxf2gcode"
             exit
         fi
@@ -331,20 +342,24 @@ install_debian() {
     sudo $aptversion install -y unzip
     echo
 
-#    echo "${GREEN}Remove orphaned packages...${NC}"
-#    sudo $aptversion autoremove -y
-#    echo
+    #echo "${GREEN}Remove orphaned packages...${NC}"
+    #sudo $aptversion autoremove -y
+    #echo
 
-    if echo "$answer" | grep -iq "^1" ; then
-        echo "${GREEN}Download the latest stable...${NC}"
-        download_zip "$STABLE_SOURCE_URL" "$HOME/dxf2gcode"
-        pfad=$(find_deepest_dxf2gcode_dir "$HOME/dxf2gcode")
-        cd "$pfad"
+    # Immer dev Version installieren!
 
-    else
-        echo "${GREEN}Download the developer version...${NC}"
-        select_source_dir
-    fi
+    #if echo "$answer" | grep -iq "^1" ; then
+    #    echo "${GREEN}Download the latest stable...${NC}"
+    #    download_zip "$STABLE_SOURCE_URL" "$HOME/dxf2gcode"
+    #    pfad=$(find_deepest_dxf2gcode_dir "$HOME/dxf2gcode")
+    #    cd "$pfad"
+    #
+    #else
+    #    echo "${GREEN}Download the developer version...${NC}"
+    #    select_source_dir
+    #fi
+    echo "${GREEN}Download the developer version...${NC}"
+    select_source_dir
 
     echo
     echo "${GREEN}Install dependencies...${NC}"
@@ -550,19 +565,18 @@ if [ $install_own_source -eq 1 ] ;then
     fi
 fi
 
-#ICON_FILE="$HOME/DXF2GCODE.ico"
-ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
-
+# Icon Download
 if [ ! -f "$ICON_FILE" ]; then
     echo
     echo "${GREEN}Downloading icon…${NC}"
     wget -O "$ICON_FILE" "$ICON_URL"
 fi
 
+# Starter
 # Alten Starter löschen
 echo
-echo "${GREEN}Build the dxf2gcode.sh starter script in HOME directory...${NC}"
-rm -f $HOME/dxf2gcode.sh
+echo "${GREEN}Build the $STARTER_FILE file...${NC}"
+rm -f "$STARTER_FILE"
 
 # Absoluten Pfad zur ausführbaren dxf2gcode-Datei in der .venv ermitteln
 REAL_EXEC_PATH=$(find "$HOME/dxf2gcode" -type f -path "*/.venv/bin/dxf2gcode" | head -n 1)
@@ -574,8 +588,8 @@ fi
 
 echo "${GREEN}Determined binary path for starter: $REAL_EXEC_PATH${NC}"
 
-# Starter im HOME-Verzeichnis erstellen
-cat << EOF > "$HOME/dxf2gcode.sh"
+# Starter erstellen
+cat << EOF > "$STARTER_FILE"
 #!/bin/bash
 # dxf2gcode.sh
 # Launches dxf2gcode directly from its virtual environment
@@ -586,7 +600,7 @@ exec "$REAL_EXEC_PATH" "\$@"
 EOF
 
 # Starter ausführbar machen
-chmod +x "$HOME/dxf2gcode.sh"
+chmod +x "$STARTER_FILE"
 
 echo
 echo "${LIGHTCYAN}dxf2gcode was successfully installed.${NC}"
