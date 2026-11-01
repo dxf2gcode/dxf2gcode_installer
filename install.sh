@@ -18,7 +18,8 @@ STABLE_SOURCE_URL="https://sourceforge.net/projects/dxf2gcode/files/dxf2gcode-20
 DEV_URL="https://sourceforge.net/code-snapshots/git/d/dx/dxf2gcode/sourcecode.git/dxf2gcode-sourcecode-6772cd770273130fee1e636fb1a0a164182ab3c4.zip"
 #DEV_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/dxf2gcode.zip/download"
 
-GITHUB_URL="https://github.com/ltspicer/dxf2gcode_dev/archive/master.zip"
+GITHUB_URL="https://github.com/dxf2gcode/dxf2gcode/archive/master.zip"
+#GITHUB_URL="https://github.com/ltspicer/dxf2gcode_dev/archive/master.zip"
 #GITHUB_URL="https://github.com/ltspicer/dxf2gcode/archive/master.zip"
 
 ICON_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/DXF2GCODE.ico/download"
@@ -63,7 +64,7 @@ if [ -d "$HOME/dxf2gcode" ]; then
                 ;;
             [Rr])
                 while true; do
-                    echo "Rename selected. Please enter a new name for the old installation (instead of dxf2gcode):"
+                    echo "Rename selected. Please enter a new name for the old installation (instead of dxf2gcode. Eg. dxf2gcode.bak):"
                     read -r new_name
                     
                     if [ -z "$new_name" ] || [ "$new_name" = "dxf2gcode" ]; then
