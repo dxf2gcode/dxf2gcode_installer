@@ -1,2 +1,0 @@
-"""DXF reader adapters."""
-
