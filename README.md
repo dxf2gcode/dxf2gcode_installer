@@ -17,7 +17,7 @@ Enter in the console:
 
 **cd ~/Downloads**<br>
 **wget https://raw.github.com/dxf2gcode/dxf2gcode_installer/main/install.sh**<br>
-**chmod a+x linux.installer.sh**<br>
+**chmod a+x install.sh**<br>
 **./install.sh**<br>
 
 
