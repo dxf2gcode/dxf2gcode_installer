@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.3 #"
+echo "# dxf2gcode Install Script V6.4 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -25,7 +25,8 @@ GITHUB_URL="https://github.com/dxf2gcode/dxf2gcode/archive/master.zip"
 
 ICON_URL="https://raw.github.com/dxf2gcode/dxf2gcode_installer/main/dxf2gcode-d2g-symbol-v5-512.png"
 #ICON_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/DXF2GCODE.ico/download"
-ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
+ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.png"
+#ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
 
 sourceforge=false       # Download from github: false | Download from sourceforge: true
 pipversion="pip3"       # pip command syntax
@@ -36,25 +37,56 @@ STARTER_FILE="$HOME/dxf2gcode.sh"
 
 #### Do not make any changes from here!
 
-# Python betreffendes
-PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
-MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
-PYDIR="/usr/lib/python${MAJOR}.${MINOR}"
-
-REQUIRED_MAJOR=3
-REQUIRED_MINOR=9
-
 # Farben Konsole
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 LIGHTCYAN=$'\033[1;36m'
 NC=$'\033[0m'
 
+BACKUP_TMPDIR=$(mktemp -d)
+
+# Exit mit Restore
+exit_restore() {
+    rm -rf "$HOME/dxf2gcode"
+    set -e
+    if [ -d "$BACKUP_TMPDIR/dxf2gcode" ]; then
+        mv "$BACKUP_TMPDIR/dxf2gcode" "$HOME/dxf2gcode"
+    fi
+    rm -rf "$BACKUP_TMPDIR"
+    exit 1
+}
+
 # Nicht als root Überprüfung
 if [ "$(id -u)" -eq 0 ]; then
     echo "${RED}This script must NOT be executed as root or via sudo!${NC}"
     echo
+    exit 1
+fi
+
+if ! hash "$pyversion"; then
+    echo "${RED}$pyversion is not installed"
+    echo "Script ends in 8 seconds${NC}"
+    sleep 8
+    exit 1
+fi
+
+echo "${GREEN}Installed Python version:"
+"$pyversion" -V
+echo "${NC}"
+
+# Python betreffendes
+PYVER=$("$pyversion" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+MAJOR=$("$pyversion" -c "import sys; print(sys.version_info.major)")
+MINOR=$("$pyversion" -c "import sys; print(sys.version_info.minor)")
+PYDIR="/usr/lib/python${MAJOR}.${MINOR}"
+
+REQUIRED_MAJOR=3
+REQUIRED_MINOR=9
+
+if [ "$MAJOR" -lt "$REQUIRED_MAJOR" ] || { [ "$MAJOR" -eq "$REQUIRED_MAJOR" ] && [ "$MINOR" -lt "$REQUIRED_MINOR" ]; }; then
+    echo "${RED}Error: Python ${REQUIRED_MAJOR}.${REQUIRED_MINOR} or higher is required (found $PYVER)."
+    echo "Please install a modern Python version.${NC}"
+    sleep 8
     exit 1
 fi
 
@@ -71,15 +103,18 @@ if [ -d "$HOME/dxf2gcode" ]; then
         case "$choice" in
             [Oo])
                 echo "Overwrite selected. Existing directory will be deleted..."
-                sudo rm -rf "$HOME/dxf2gcode"
+                mv "$HOME/dxf2gcode" "$BACKUP_TMPDIR"
+                echo "${GREEN}Backup in $BACKUP_TMPDIR ${NC}"
                 break
                 ;;
             [Rr])
                 while true; do
                     echo "Rename selected. Please enter a new name for the old installation (instead of dxf2gcode. Eg. dxf2gcode.bak):"
                     read -r new_name
-                    
-                    if [ -z "$new_name" ] || [ "$new_name" = "dxf2gcode" ]; then
+
+                    if [ -e "$HOME/$new_name" ]; then
+                        echo "${RED}Error: That name already exists!${NC}"
+                    elif [ -z "$new_name" ] || [ "$new_name" = "dxf2gcode" ]; then
                         echo "${RED}Error: The name cannot be empty or identical!${NC}"
                     else
                         mv "$HOME/dxf2gcode" "$HOME/$new_name"
@@ -124,19 +159,19 @@ download_zip() {
 
     echo "${GREEN}Downloading: $url${NC}"
 
-    if ! wget -L -O "$TMPDIR/dev.zip" "$url"; then
+    if ! wget -O "$TMPDIR/dev.zip" "$url"; then
         echo
         echo "${RED}Error: Download failed (e.g., 404 Not Found or no connection).${NC}"
         # Temporäres Verzeichnis löschen
         rm -rf "$TMPDIR"
-        exit 1
+        exit_restore
     fi
 
     # Überprüfung, ob die Datei existiert und nicht leer ist
     if [ ! -s "$TMPDIR/dev.zip" ]; then
         echo "${RED}Error: The downloaded file is empty or does not exist.${NC}"
         rm -rf "$TMPDIR"
-        exit 1
+        exit_restore
     fi
 
     # Entpacken
@@ -144,7 +179,7 @@ download_zip() {
     if ! unzip "$TMPDIR/dev.zip" -d "$outdir"; then
         echo "${RED}Error: Could not extract file. Not a valid ZIP file.${NC}"
         rm -rf "$TMPDIR"
-        exit 1
+        exit_restore
     fi
 
     #echo
@@ -165,12 +200,12 @@ download_source() {
     else
         echo "${GREEN}Download from GITHUB${NC}"
         download_zip "$GITHUB_URL" "$HOME/dxf2gcode"
-        echo "${GREEN}Downloading icon…${NC}"
-        wget -O ${HOME}/DXF2GCODE.ico https://raw.githubusercontent.com/ltspicer/dxf2gcode.linux.installer/main/DXF2GCODE.ico
+        #echo "${GREEN}Downloading icon…${NC}"
+        #wget -O "$ICON_FILE" "$ICON_URL"
     fi
 
     pfad=$(find_deepest_dxf2gcode_dir "$HOME/dxf2gcode")
-    cd "$pfad" || { echo "${RED}Error: Could not change to directory $pfad ${NC}"; exit 1; }
+    cd "$pfad" || { echo "${RED}Error: Could not change to directory $pfad ${NC}"; exit_restore; }
 
     echo "${GREEN}Current folder: $(pwd)${NC}"
 }
@@ -219,7 +254,7 @@ select_source_dir() {
 
                 [ -z "$SRC" ] && SRC="_"
                 if echo "$SRC" | grep -iq "^q" ; then
-                    exit
+                    exit_restore
                 fi
 
                 pfad="${HOME}/$SRC"
@@ -229,7 +264,7 @@ select_source_dir() {
                 read -n 1 -r answer
 
                 if echo "$answer" | grep -iq "^q" ; then
-                    exit
+                    exit_restore
                 fi
 
                 if echo "$answer" | grep -iq "^y" ; then
@@ -242,10 +277,15 @@ select_source_dir() {
                             echo "${RED}This source contains the install.sh script. Please use this one!${NC}"
                             echo
                             sleep 8
-                            exit 1
+                            exit_restore
                         fi
 
-                        cd "$pfad"
+                        own_path="$HOME/dxf2gcode/dxf2gcode-own_source"
+                        rm -rf "$own_path"
+                        mkdir -p "$own_path"
+                        cp -r "$pfad/." "$own_path"
+                        cd "$own_path"
+
                         install_own_source=1
                         return
                     fi
@@ -255,29 +295,8 @@ select_source_dir() {
     done
 }
 
-check_python_version() {    # Python version >= 3.9 ?
-    if [ "$MAJOR" -lt "$REQUIRED_MAJOR" ] || { [ "$MAJOR" -eq "$REQUIRED_MAJOR" ] && [ "$MINOR" -lt "$REQUIRED_MINOR" ]; }; then
-        echo "${RED}Error: Python ${REQUIRED_MAJOR}.${REQUIRED_MINOR} or higher is required (found $PYVER)."
-        echo "Please install a modern Python version.${NC}"
-        sleep 8
-        exit 1
-    fi
-}
-
 install_debian() {
-    check_python_version
-
-    if ! hash $pyversion; then
-        echo "${RED}$pyversion is not installed"
-        echo "Script ends in 8 seconds${NC}"
-        sleep 8
-        exit
-    fi
-
-    echo "${GREEN}Installed Python version:"
-    $pyversion -V
-    echo "${NC}"
-
+    echo
     # Must be developer version if Python >= 3.10
 
     #if [ "$MAJOR" -gt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 10 ]; }; then
@@ -297,7 +316,7 @@ install_debian() {
     #    while true; do
     #        read -n 1 -r answer
     #        if echo "$answer" | grep -iq "^3" ;then
-    #            exit
+    #            exit_restore
     #        fi
     #        if echo "$answer" | grep -iq "^1" ;then
     #            break
@@ -312,7 +331,7 @@ install_debian() {
     #    while true; do
     #        read -n 1 -r answer
     #        if echo "$answer" | grep -iq "^3" ;then
-    #            exit
+    #            exit_restore
     #        fi
     #        if echo "$answer" | grep -iq "^2" ;then
     #            break
@@ -329,22 +348,21 @@ install_debian() {
             break
         fi
         if echo "$answer" | grep -iq "^q" ;then
-            sudo rm -rf "$HOME/dxf2gcode"
-            exit
+            exit_restore
         fi
     done
 
-    #set +e
+    set -e
 
     echo "${GREEN}Update system...${NC}"
-    sudo $aptversion update
-    sudo $aptversion install -y git
-    sudo $aptversion install -y wget
-    sudo $aptversion install -y unzip
+    sudo "$aptversion" update
+    sudo "$aptversion" install -y git
+    sudo "$aptversion" install -y wget
+    sudo "$aptversion" install -y unzip
     echo
 
     #echo "${GREEN}Remove orphaned packages...${NC}"
-    #sudo $aptversion autoremove -y
+    #sudo "$aptversion" autoremove -y
     #echo
 
     # Immer dev Version installieren!
@@ -366,19 +384,19 @@ install_debian() {
     echo "${GREEN}Install dependencies...${NC}"
     echo
 
-    sudo $aptversion install -y python3-venv
-    sudo $aptversion install -y qt6-base-dev
-    sudo $aptversion install -y qt6-tools-dev
-    sudo $aptversion install -y pyqt5-dev-tools
-    sudo $aptversion install -y pyqt6-dev-tools
-    sudo $aptversion install -y libxcb-cursor0
+    sudo "$aptversion" install -y python3-venv
+    sudo "$aptversion" install -y qt6-base-dev
+    sudo "$aptversion" install -y qt6-tools-dev
+    sudo "$aptversion" install -y pyqt5-dev-tools
+    sudo "$aptversion" install -y pyqt6-dev-tools
+    sudo "$aptversion" install -y libxcb-cursor0
 
     # Qt6-Tools in den Pfad aufnehmen (wichtig für Debian/Ubuntu)
     export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
 
     # Sucht nach der pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
     BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
-    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit 1; }
+    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit_restore; }
 
     echo
     echo "BUILD_DIR: $BUILD_DIR, Current directory:"
@@ -389,17 +407,17 @@ install_debian() {
     echo
     echo "${GREEN}Activate virtual environment...${NC}"
 
-    $pyversion -m venv .venv
+    "$pyversion" -m venv .venv
     source .venv/bin/activate
 
     echo
     echo "${GREEN}Install pip, setuptools, wheel, build, PyQt...${NC}"
-    $pipversion install --upgrade pip
-    $pipversion install setuptools wheel build
+    "$pipversion" install --upgrade pip
+    "$pipversion" install setuptools wheel build
     if command -v rcc >/dev/null 2>&1 || command -v lrelease-qt6 >/dev/null 2>&1; then
-        $pipversion install PyQt6
+        "$pipversion" install PyQt6
     else
-        $pipversion install PyQt5
+        "$pipversion" install PyQt5
     fi
 
     echo
@@ -409,8 +427,8 @@ install_debian() {
     mkdir -p dxf2gcode/presentation/qt/generated i18n
 
     # Asset-Generierung absichern (falls ein System-Tool fehlt)
-    $pyversion tools/build/qt_assets.py || true
-    $pyversion tools/build/translations.py --no-pylupdate || true
+    "$pyversion" tools/build/qt_assets.py || true
+    "$pyversion" tools/build/translations.py --no-pylupdate || true
 
     # Sicherstellen, dass jede vom Validator verlangte Datei existiert.
     # Falls Qt5-Dateien fehlen, fülle sie mit Qt6
@@ -429,15 +447,16 @@ install_debian() {
     # Wheel bauen und installieren
     echo
     echo "${GREEN}Build wheel file...${NC}"
-    $pipversion wheel . --no-deps --no-build-isolation --wheel-dir dist
-    $pipversion install dist/*.whl
+    "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
+    "$pipversion" install dist/*.whl
+    set +e
 }
 
 install_arch() {
-    check_python_version
-
     echo
     echo "${GREEN}Install required system packages via pacman...${NC}"
+
+    set -e
 
     sudo pacman -S --needed --noconfirm \
         qt6-tools \
@@ -452,24 +471,24 @@ install_arch() {
     # Überprüfe das Quellverzeichnis
     if [ -z "$pfad" ] || [ ! -d "$pfad" ]; then
         echo "${RED}Error: Source folder not found!${NC}"
-        exit 1
+        exit_restore
     fi
 
     # Sucht die pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
     BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
-    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit 1; }
+    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit_restore; }
 
     # Virtuelle Umgebung erstellen und aktivieren
     echo
     echo "${GREEN}Activate virtual environment...${NC}"
-    $pyversion -m venv .venv
+    "$pyversion" -m venv .venv
     source .venv/bin/activate
 
     # Python Build-Abhängigkeiten in der venv installieren
     echo
     echo "${GREEN}Install pip, setuptools, wheel, build, PyQt...${NC}"
-    $pipversion install --upgrade pip
-    $pipversion install PyQt5 PyQt6 setuptools wheel build
+    "$pipversion" install --upgrade pip
+    "$pipversion" install PyQt5 PyQt6 setuptools wheel build
 
     # Falls die Qt-Tools systemspezifisch im Pfad fehlen, Arch-Standardpfade hinzufügen
     export PATH="/usr/lib/qt6/bin:/usr/lib/qt/bin:$PATH"
@@ -479,8 +498,8 @@ install_arch() {
     # Assets und Übersetzungen generieren
     echo
     echo "${GREEN}Build language files...${NC}"
-    $pyversion tools/build/qt_assets.py || true
-    $pyversion tools/build/translations.py --no-pylupdate || true
+    "$pyversion" tools/build/qt_assets.py || true
+    "$pyversion" tools/build/translations.py --no-pylupdate || true
 
     # Falls der Arch-rcc-Compiler stur PySide-Code erzeugt hat, 
     # Importzeile in der generierten Datei auf PyQt6 umpatchen:
@@ -504,13 +523,14 @@ install_arch() {
     # 5. Wheel bauen und in der venv installieren
     echo
     echo "${GREEN}Build wheel file...${NC}"
-    $pipversion wheel . --no-deps --no-build-isolation --wheel-dir dist
-    $pipversion install dist/*.whl
+    "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
+    "$pipversion" install dist/*.whl
+    set +e
 }
 
 install_other() {
     echo "${RED}Unsupported OS. Manual installation required.${NC}"
-    exit 1
+    exit_restore
 }
 
 # --- OS detection ---
@@ -557,14 +577,14 @@ esac
 #fi
 
 # source löschen?
-if [ $install_own_source -eq 1 ] ;then
-    echo
-    echo "${LIGHTCYAN}Should I delete the "$pfad" directory (y/N)?${NC}"
-    read -n 1 -r answer
-    if echo "$answer" | grep -iq "^y" ;then
-        sudo rm -rf $pfad
-    fi
-fi
+#if [ $install_own_source -eq 1 ] ;then
+#    echo
+#    echo "${LIGHTCYAN}Should I delete the "$pfad" directory (y/N)?${NC}"
+#    read -n 1 -r answer
+#    if echo "$answer" | grep -iq "^y" ;then
+#        sudo rm -rf "$pfad"
+#    fi
+#fi
 
 # Icon Download
 if [ ! -f "$ICON_FILE" ]; then
@@ -574,11 +594,6 @@ if [ ! -f "$ICON_FILE" ]; then
 fi
 
 # Starter
-# Alten Starter löschen
-echo
-echo "${GREEN}Build the $STARTER_FILE file...${NC}"
-rm -f "$STARTER_FILE"
-
 # Absoluten Pfad zur ausführbaren dxf2gcode-Datei in der .venv ermitteln
 REAL_EXEC_PATH=$(find "$HOME/dxf2gcode" -type f -path "*/.venv/bin/dxf2gcode" | head -n 1)
 
@@ -588,6 +603,11 @@ if [ -z "$REAL_EXEC_PATH" ]; then
 fi
 
 echo "${GREEN}Determined binary path for starter: $REAL_EXEC_PATH${NC}"
+
+# Alten Starter löschen
+echo
+echo "${GREEN}Build the $STARTER_FILE file...${NC}"
+rm -f "$STARTER_FILE"
 
 # Starter erstellen
 cat << EOF > "$STARTER_FILE"
@@ -602,6 +622,9 @@ EOF
 
 # Starter ausführbar machen
 chmod +x "$STARTER_FILE"
+
+# TMP Verzeichnis löschen
+rm -rf "$BACKUP_TMPDIR"
 
 echo
 echo "${LIGHTCYAN}dxf2gcode was successfully installed.${NC}"
