@@ -1,5 +1,5 @@
 ## This repo is only for tests with install.sh script!
-## Do not use productive!
+## Do not use on production systems!
 
 ```
 #################################
