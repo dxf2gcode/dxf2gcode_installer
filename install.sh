@@ -23,7 +23,8 @@ GITHUB_URL="https://github.com/dxf2gcode/dxf2gcode/archive/master.zip"
 #GITHUB_URL="https://github.com/ltspicer/dxf2gcode_dev/archive/master.zip"
 #GITHUB_URL="https://github.com/ltspicer/dxf2gcode/archive/master.zip"
 
-ICON_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/DXF2GCODE.ico/download"
+ICON_URL="https://raw.github.com/dxf2gcode/dxf2gcode_installer/main/dxf2gcode-d2g-symbol-v5-512.png"
+#ICON_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/DXF2GCODE.ico/download"
 ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
 
 sourceforge=false       # Download from github: false | Download from sourceforge: true
