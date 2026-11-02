@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.5 #"
+echo "# dxf2gcode Install Script V6.6 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -13,7 +13,7 @@ echo "Support: https://www.ltspiceusers.ch/#dxf2gcode.68"
 echo ""
 echo ""
 
-# URLs
+## URLs
 #STABLE_SOURCE_URL="https://sourceforge.net/projects/dxf2gcode/files/dxf2gcode-20220226_RC1.zip/download"
 
 SOURCEFORGE_DEV_URL="https://sourceforge.net/code-snapshots/git/d/dx/dxf2gcode/sourcecode.git/dxf2gcode-sourcecode-6772cd770273130fee1e636fb1a0a164182ab3c4.zip"
@@ -23,6 +23,7 @@ GITHUB_DEV_URL="https://github.com/dxf2gcode/dxf2gcode/archive/master.zip"
 
 ICON_URL="https://raw.github.com/dxf2gcode/dxf2gcode_installer/main/dxf2gcode_symbol.png"
 #ICON_URL="https://sourceforge.net/projects/dxf2gcode/files/Development/DXF2GCODE.ico/download"
+
 ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.png"
 #ICON_FILE="$HOME/dxf2gcode/DXF2GCODE.ico"
 
@@ -35,7 +36,7 @@ STARTER_FILE="$HOME/dxf2gcode.sh"
 
 #### Do not make any changes from here!
 
-# Farben Konsole
+## Farben Konsole
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 LIGHTCYAN=$'\033[1;36m'
@@ -43,19 +44,21 @@ NC=$'\033[0m'
 
 BACKUP_TMPDIR=$(mktemp -d)
 
-# Exit mit Restore
+## Exit mit Restore
 exit_restore() {
     rm -rf "$HOME/dxf2gcode"
     set -e
     if [ -d "$BACKUP_TMPDIR/dxf2gcode" ]; then
         echo "${GREEN}Restoring $BACKUP_TMPDIR/dxf2gcode...${NC}"
         mv "$BACKUP_TMPDIR/dxf2gcode" "$HOME/dxf2gcode"
+    else
+        echo "${GREEN}No backup found. Nothing to restore.${NC}"
     fi
     rm -rf "$BACKUP_TMPDIR"
     exit 1
 }
 
-# Nicht als root Überprüfung
+## Nicht als root Überprüfung
 if [ "$(id -u)" -eq 0 ]; then
     echo "${RED}This script must NOT be executed as root or via sudo!${NC}"
     echo
@@ -73,7 +76,7 @@ echo "${GREEN}Installed Python version:"
 "$pyversion" -V
 echo "${NC}"
 
-# Python betreffendes
+## Python betreffendes
 PYVER=$("$pyversion" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 MAJOR=$("$pyversion" -c "import sys; print(sys.version_info.major)")
 MINOR=$("$pyversion" -c "import sys; print(sys.version_info.minor)")
@@ -89,7 +92,7 @@ if [ "$MAJOR" -lt "$REQUIRED_MAJOR" ] || { [ "$MAJOR" -eq "$REQUIRED_MAJOR" ] &&
     exit 1
 fi
 
-# Aktion bei existierender Installation
+## Aktion bei existierender Installation
 if [ -d "$HOME/dxf2gcode" ]; then
     echo "${LIGHTCYAN}$HOME/dxf2gcode directory exists."
     
@@ -136,7 +139,7 @@ if [ -d "$HOME/dxf2gcode" ]; then
     done
 fi
 
-# Installations Routine
+## Installations Routine
 
 mkdir "$HOME/dxf2gcode"
 
@@ -184,9 +187,6 @@ download_zip() {
         exit_restore
     fi
 
-    #echo
-    #echo "TMP directory: $TMPDIR, Content:"
-    #ls "$TMPDIR"
     echo
     echo "Output directory: $outdir, Content:"
     ls "$outdir"
@@ -239,14 +239,14 @@ select_source_dir() {
             exit_restore
         fi
 
-        # --- Automatic developer download ---
+        # Automatic developer download
         if echo "$answer" | grep -iq "^y" ; then
             download_source
             install_own_source=0
             return
         fi
 
-        # --- Manual path selection ---
+        # Manual path selection
         if echo "$answer" | grep -iq "^n" ; then
             echo
             echo "${RED}Ok. First download the desired version of dxf2gcode into your home directory${NC}"
@@ -254,7 +254,7 @@ select_source_dir() {
             echo
             echo "${GREEN}https://sourceforge.net/p/dxf2gcode/sourcecode/ci/develop/tree${NC} (source directory)"
             echo "or"
-            echo "${GREEN}https://github.com/ltspicer/dxf2gcode${NC}"
+            echo "${GREEN}https://github.com/dxf2gcode/dxf2gcode${NC}"
             echo
 
             while true; do
@@ -291,11 +291,15 @@ select_source_dir() {
                             exit_restore
                         fi
 
-                        own_path="$HOME/dxf2gcode/dxf2gcode-own_source"
+                        own_path="$HOME/dxf2gcode"
                         rm -rf "$own_path"
                         mkdir -p "$own_path"
                         cp -r "$pfad/." "$own_path"
-                        cd "$own_path"
+                        pfad="$own_path"
+                        cd "$pfad" || {
+                            echo "${RED}Error: Could not change to directory $pfad.${NC}"
+                            exit_restore
+                        }
 
                         install_own_source=1
                         return
@@ -306,52 +310,81 @@ select_source_dir() {
     done
 }
 
+arch_package_set_available() {
+    local package
+
+    for package in "$@"; do
+        if pacman -Q "$package" >/dev/null 2>&1 ||
+           pacman -Si "$package" >/dev/null 2>&1; then
+            continue
+        fi
+        return 1
+    done
+
+    return 0
+}
+
+patch_qt_validator() {
+    local validator="$1"
+
+    "$pyversion" - "$validator" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+
+if "import os\n" not in source:
+    source = source.replace("import sys\n", "import os\nimport sys\n", 1)
+
+start = source.index("def validate_assets():")
+end = source.index("\n\nclass BuildPy", start)
+
+replacement = '''def validate_assets():
+    version = os.environ.get("DXF2GCODE_QT", "5")
+    if version not in ("5", "6"):
+        raise RuntimeError("DXF2GCODE_QT must be 5 or 6.")
+
+    missing = []
+    names = (
+        "dxf2gcode_ui%s.py" % version,
+        "dxf2gcode_images%s_rc.py" % version,
+    )
+
+    for name in names:
+        path = GENERATED / name
+        if not path.is_file():
+            missing.append(str(path.relative_to(ROOT)))
+        elif "from PySide6" in path.read_text(encoding="utf-8"):
+            raise RuntimeError(
+                "%s must be generated for PyQt%s; run "
+                "tools/build/qt_assets.py with DXF2GCODE_QT=%s before building."
+                % (path.name, version, version)
+            )
+
+    sources = sorted(CATALOGS.glob("dxf2gcode_*.ts"))
+    if not sources:
+        missing.append("i18n/dxf2gcode_*.ts")
+
+    for source in sources:
+        if not source.with_suffix(".qm").is_file():
+            missing.append(str(source.with_suffix(".qm").relative_to(ROOT)))
+
+    if missing:
+        raise RuntimeError(
+            "Qt release assets are missing: %s. Prepare Qt %s assets with "
+            "tools/build/qt_assets.py and compile translations with "
+            "tools/build/translations.py --no-pylupdate before building."
+            % (", ".join(missing), version)
+        )
+'''
+
+source = source[:start] + replacement + source[end:]
+path.write_text(source, encoding="utf-8")
+PY
+}
+
 install_debian() {
-    echo
-    # Must be developer version if Python >= 3.10
-
-    #if [ "$MAJOR" -gt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 10 ]; }; then
-    #    echo "${GREEN}Python $PYVER detected (>= 3.10)."
-    #    echo "Developer version of dxf2gcode will be installed.${NC}"
-    #    install_own_source=1
-    #fi
-
-    #set -e
-
-    # Immer dev Version installieren!
-    #echo "${LIGHTCYAN}Do you want install..."
-    #if [ $install_own_source -eq 0 ] ;then
-    #    echo "1   ...the latest stable version"
-    #    echo "2   ...a developer version"
-    #    echo "3   Quit installer${NC}"
-    #    while true; do
-    #        read -n 1 -r answer
-    #        echo
-    #        if echo "$answer" | grep -iq "^3" ;then
-    #            exit_restore
-    #        fi
-    #        if echo "$answer" | grep -iq "^1" ;then
-    #            break
-    #        fi
-    #        if echo "$answer" | grep -iq "^2" ;then
-    #            break
-    #        fi
-    #    done
-    #else
-    #    echo "${LIGHTCYAN}2   ...a developer version"
-    #    echo "3   Quit installer${NC}"
-    #    while true; do
-    #        read -n 1 -r answer
-    #        echo
-    #        if echo "$answer" | grep -iq "^3" ;then
-    #            exit_restore
-    #        fi
-    #        if echo "$answer" | grep -iq "^2" ;then
-    #            break
-    #        fi
-    #    done
-    #fi
-
     echo
     echo "${LIGHTCYAN}Ready to install? (y = Yes / q = Quit installer)?${NC}"
     while true; do
@@ -379,18 +412,6 @@ install_debian() {
     #sudo "$aptversion" autoremove -y
     #echo
 
-    # Immer dev Version installieren!
-
-    #if echo "$answer" | grep -iq "^1" ; then
-    #    echo "${GREEN}Download the latest stable...${NC}"
-    #    download_zip "$STABLE_SOURCE_URL" "$HOME/dxf2gcode"
-    #    pfad=$(find_deepest_dxf2gcode_dir "$HOME/dxf2gcode")
-    #    cd "$pfad"
-    #
-    #else
-    #    echo "${GREEN}Download the developer version...${NC}"
-    #    select_source_dir
-    #fi
     echo "${GREEN}Download the developer version...${NC}"
     select_source_dir
 
@@ -398,148 +419,245 @@ install_debian() {
     echo "${GREEN}Install dependencies...${NC}"
     echo
 
+    set -Ee
+    trap 'exit_restore' ERR
+
     sudo "$aptversion" install -y python3-venv
-    sudo "$aptversion" install -y qt6-base-dev
-    sudo "$aptversion" install -y qt6-tools-dev
-    sudo "$aptversion" install -y pyqt5-dev-tools
-    sudo "$aptversion" install -y pyqt6-dev-tools
-    sudo "$aptversion" install -y libxcb-cursor0
 
-    # Qt6-Tools in den Pfad aufnehmen (wichtig für Debian/Ubuntu)
-    export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
+    # Prüft: Paket ist installiert oder hat einen APT-Kandidaten.
+    package_set_available() {
+        local package candidate
 
-    # Sucht nach der pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
-    BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
-    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit_restore; }
+        for package in "$@"; do
+            if dpkg-query -W -f='${Status}' "$package" 2>/dev/null |
+                grep -q 'install ok installed'; then
+                continue
+            fi
+
+            candidate=$(LC_ALL=C apt-cache policy "$package" 2>/dev/null |
+                awk '$1 == "Candidate:" { print $2; exit }')
+
+            if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
+                return 1
+            fi
+        done
+
+        return 0
+    }
+
+    QT5_PACKAGES=(
+        qtbase5-dev
+        qtbase5-dev-tools
+        qttools5-dev-tools
+    )
+
+    QT6_PACKAGES=(
+        qt6-base-dev
+        qt6-base-dev-tools
+        qt6-l10n-tools
+    )
+
+    # Qt5 bevorzugen; Qt6 nur verwenden, wenn der Qt5-Werkzeugsatz fehlt.
+    if package_set_available "${QT5_PACKAGES[@]}"; then
+        QT_VERSION=5
+        sudo "$aptversion" install -y \
+            "${QT5_PACKAGES[@]}" \
+            libxcb-cursor0
+    elif package_set_available "${QT6_PACKAGES[@]}"; then
+        QT_VERSION=6
+        sudo "$aptversion" install -y \
+            "${QT6_PACKAGES[@]}" \
+            libxcb-cursor0
+        export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:/usr/lib64/qt6/libexec:$PATH"
+    else
+        echo "${RED}Error: Qt 5 and Qt 6 build tools are unavailable.${NC}"
+        exit_restore
+    fi
+
+    echo "${GREEN}Qt ${QT_VERSION} selected.${NC}"
+
+    # pyproject.toml finden
+    PYPROJECT_FILE=$(find "$pfad" -type f -name "pyproject.toml" -print -quit)
+
+    if [ -z "$PYPROJECT_FILE" ]; then
+        echo "${RED}Error: pyproject.toml not found under $pfad.${NC}"
+        exit_restore
+    fi
+
+    BUILD_DIR=$(dirname "$PYPROJECT_FILE")
+    cd "$BUILD_DIR" || {
+        echo "${RED}Error: Could not change to directory $BUILD_DIR.${NC}"
+        exit_restore
+    }
 
     echo
-    echo "BUILD_DIR: $BUILD_DIR, Current directory:"
-    pwd
+    echo "BUILD_DIR: $BUILD_DIR"
     echo
 
     # Virtuelle Umgebung erstellen und aktivieren
-    echo
-    echo "${GREEN}Activate virtual environment...${NC}"
-
+    echo "${GREEN}Create and activate virtual environment...${NC}"
     "$pyversion" -m venv .venv
     source .venv/bin/activate
 
-    echo
-    echo "${GREEN}Install pip, setuptools, wheel, build, PyQt...${NC}"
     "$pipversion" install --upgrade pip
     "$pipversion" install setuptools wheel build
-    if command -v rcc >/dev/null 2>&1 || command -v lrelease-qt6 >/dev/null 2>&1; then
-        "$pipversion" install PyQt6
-    else
+
+    if [ "$QT_VERSION" -eq 5 ]; then
         "$pipversion" install PyQt5
+    else
+        "$pipversion" install PyQt6
     fi
 
-    echo
-    echo "${GREEN}Build language files...${NC}"
+    # Die Variable steuert sowohl qt_compat als auch den Build-Validator.
+    export DXF2GCODE_QT="$QT_VERSION"
 
-    # Ordner für generierte Dateien erstellen
-    mkdir -p dxf2gcode/presentation/qt/generated i18n
+    # Validator in dieser Quellkopie auf die ausgewählte Qt-Version begrenzen.
+    python3 - "$BUILD_DIR/tools/build/setuptools_commands.py" <<'PY'
+from pathlib import Path
+import sys
 
-    # Asset-Generierung absichern (falls ein System-Tool fehlt)
-    "$pyversion" tools/build/qt_assets.py || true
-    "$pyversion" tools/build/translations.py --no-pylupdate || true
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
 
-    # Sicherstellen, dass jede vom Validator verlangte Datei existiert.
-    # Falls Qt5-Dateien fehlen, fülle sie mit Qt6
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py
+if "import os\n" not in source:
+    source = source.replace("import sys\n", "import os\nimport sys\n", 1)
 
-    # Falls Qt6-Dateien fehlen, fülle sie mit Qt5
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py
+start = source.index("def validate_assets():")
+end = source.index("\n\nclass BuildPy", start)
 
-    # Dummies für ev. fehlende Sprachdateien erzeugen, falls lrelease gestreikt hat
-    for lang in de fr ru; do
-        touch i18n/dxf2gcode_${lang}.qm
-    done
+replacement = '''def validate_assets():
+    version = os.environ.get("DXF2GCODE_QT", "5")
+    if version not in ("5", "6"):
+        raise RuntimeError("DXF2GCODE_QT must be 5 or 6.")
 
-    # Wheel bauen und installieren
-    echo
-    echo "${GREEN}Build wheel file...${NC}"
+    missing = []
+    names = (
+        "dxf2gcode_ui%s.py" % version,
+        "dxf2gcode_images%s_rc.py" % version,
+    )
+
+    for name in names:
+        path = GENERATED / name
+        if not path.is_file():
+            missing.append(str(path.relative_to(ROOT)))
+        elif "from PySide6" in path.read_text(encoding="utf-8"):
+            raise RuntimeError(
+                "%s must be generated for PyQt%s; run "
+                "tools/build/qt_assets.py with DXF2GCODE_QT=%s before building."
+                % (path.name, version, version)
+            )
+
+    sources = sorted(CATALOGS.glob("dxf2gcode_*.ts"))
+    if not sources:
+        missing.append("i18n/dxf2gcode_*.ts")
+
+    for source in sources:
+        if not source.with_suffix(".qm").is_file():
+            missing.append(str(source.with_suffix(".qm").relative_to(ROOT)))
+
+    if missing:
+        raise RuntimeError(
+            "Qt release assets are missing: %s. Prepare Qt %s assets with "
+            "tools/build/qt_assets.py and compile translations with "
+            "tools/build/translations.py --no-pylupdate before building."
+            % (", ".join(missing), version)
+        )
+'''
+
+source = source[:start] + replacement + source[end:]
+path.write_text(source, encoding="utf-8")
+PY
+
+    mkdir -p dxf2gcode/presentation/qt/generated
+
+    echo "${GREEN}Generate Qt ${QT_VERSION} assets...${NC}"
+    "$pyversion" tools/build/qt_assets.py
+
+    echo "${GREEN}Compile translation catalogs with Qt ${QT_VERSION}...${NC}"
+    "$pyversion" tools/build/translations.py --no-pylupdate
+
+    echo "${GREEN}Build and install wheel...${NC}"
     "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
     "$pipversion" install dist/*.whl
-    set +e
 }
 
 install_arch() {
-    echo
-    echo "${GREEN}Install required system packages via pacman...${NC}"
+    sudo pacman -Syu
 
-    set -e
+    set -Ee
+    trap 'exit_restore' ERR
 
-    sudo pacman -S --needed --noconfirm \
-        qt6-tools \
-        qt5-tools \
-        libxcb \
-        unzip \
-        wget \
-        git
+    local QT5_PACKAGES=(qt5-base qt5-tools)
+    local QT6_PACKAGES=(qt6-base qt6-tools)
 
-    download_source
+    if arch_package_set_available "${QT5_PACKAGES[@]}"; then
+        QT_VERSION=5
+        sudo pacman -S --needed --noconfirm \
+            "${QT5_PACKAGES[@]}" libxcb unzip wget git
+    elif arch_package_set_available "${QT6_PACKAGES[@]}"; then
+        QT_VERSION=6
+        sudo pacman -S --needed --noconfirm \
+            "${QT6_PACKAGES[@]}" libxcb unzip wget git
+        export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
+    else
+        echo "${RED}Error: Qt 5 and Qt 6 tools are unavailable in pacman repositories.${NC}"
+        exit_restore
+    fi
 
-    # Überprüfe das Quellverzeichnis
+    echo "${GREEN}Qt ${QT_VERSION} selected.${NC}"
+
+    echo "${GREEN}Download the developer version...${NC}"
+    select_source_dir
+
     if [ -z "$pfad" ] || [ ! -d "$pfad" ]; then
         echo "${RED}Error: Source folder not found!${NC}"
         exit_restore
     fi
 
-    # Sucht die pyproject.toml, egal ob sie im Hauptordner oder unter /source liegt
-    BUILD_DIR=$(find "$pfad" -name "pyproject.toml" -exec dirname {} \; | head -n 1)
-    cd "$BUILD_DIR" || { echo "${RED}Error: pyproject.toml not found!${NC}"; exit_restore; }
+    local PYPROJECT_FILE
+    PYPROJECT_FILE=$(find "$pfad" -type f -name "pyproject.toml" -print -quit)
 
-    # Virtuelle Umgebung erstellen und aktivieren
+    if [ -z "$PYPROJECT_FILE" ]; then
+        echo "${RED}Error: pyproject.toml not found under $pfad.${NC}"
+        exit_restore
+    fi
+
+    local BUILD_DIR
+    BUILD_DIR=$(dirname "$PYPROJECT_FILE")
+    cd "$BUILD_DIR"
+
     echo
-    echo "${GREEN}Activate virtual environment...${NC}"
+    echo "BUILD_DIR: $BUILD_DIR"
+    echo
+
+    echo "${GREEN}Create and activate virtual environment...${NC}"
     "$pyversion" -m venv .venv
     source .venv/bin/activate
 
-    # Python Build-Abhängigkeiten in der venv installieren
-    echo
-    echo "${GREEN}Install pip, setuptools, wheel, build, PyQt...${NC}"
     "$pipversion" install --upgrade pip
-    "$pipversion" install PyQt5 PyQt6 setuptools wheel build
+    "$pipversion" install setuptools wheel build
 
-    # Falls die Qt-Tools systemspezifisch im Pfad fehlen, Arch-Standardpfade hinzufügen
-    export PATH="/usr/lib/qt6/bin:/usr/lib/qt/bin:$PATH"
-
-    export QT_SELECT=qt6
-
-    # Assets und Übersetzungen generieren
-    echo
-    echo "${GREEN}Build language files...${NC}"
-    "$pyversion" tools/build/qt_assets.py || true
-    "$pyversion" tools/build/translations.py --no-pylupdate || true
-
-    # Falls der Arch-rcc-Compiler stur PySide-Code erzeugt hat, 
-    # Importzeile in der generierten Datei auf PyQt6 umpatchen:
-    if [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py ]; then
-        sed -i 's/from PySide2 import QtCore/from PyQt6 import QtCore/g' dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py
-        sed -i 's/from PySide6 import QtCore/from PyQt6 import QtCore/g' dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py
+    if [ "$QT_VERSION" -eq 5 ]; then
+        "$pipversion" install PyQt5
+    else
+        "$pipversion" install PyQt6
     fi
 
-    # Erstellt die von setuptools verlangten Dummies, falls eine Qt-Version übersprungen wurde
-    mkdir -p dxf2gcode/presentation/qt/generated i18n
-    
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_ui5.py dxf2gcode/presentation/qt/generated/dxf2gcode_ui6.py
-    [ -f dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py ] && [ ! -f dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py ] && cp dxf2gcode/presentation/qt/generated/dxf2gcode_images5_rc.py dxf2gcode/presentation/qt/generated/dxf2gcode_images6_rc.py
+    export DXF2GCODE_QT="$QT_VERSION"
 
-    for lang in de fr ru; do
-        touch i18n/dxf2gcode_${lang}.qm
-    done
+    patch_qt_validator "$BUILD_DIR/tools/build/setuptools_commands.py"
 
-    # 5. Wheel bauen und in der venv installieren
-    echo
-    echo "${GREEN}Build wheel file...${NC}"
+    mkdir -p dxf2gcode/presentation/qt/generated
+
+    echo "${GREEN}Build Qt ${QT_VERSION} assets...${NC}"
+    "$pyversion" tools/build/qt_assets.py
+
+    echo "${GREEN}Compile translations with Qt ${QT_VERSION}...${NC}"
+    "$pyversion" tools/build/translations.py --no-pylupdate
+
+    echo "${GREEN}Build and install wheel...${NC}"
     "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
     "$pipversion" install dist/*.whl
-    set +e
 }
 
 install_other() {
@@ -547,7 +665,7 @@ install_other() {
     exit_restore
 }
 
-# --- OS detection ---
+## OS detection
 if [ -f /etc/debian_version ]; then
     OS="debian"
 elif [ -f /etc/arch-release ]; then
@@ -568,40 +686,7 @@ case "$OS" in
         ;;
 esac
 
-# venv verlassen und aus dem temporären Ordner herauswechseln
-#cd "$HOME"
-#if [ "$(type -t deactivate)" = "function" ]; then
-#    deactivate
-#fi
-
-# Ordner ins Home-Verzeichnis verschieben
-#echo
-#echo "${GREEN}Copy $pfad to the HOME directory...${NC}"
-#sudo rm -rf "$HOME/dxf2gcode"
-#cp -r "$pfad" "$HOME/dxf2gcode"
-
-# Shebang anpassen
-#echo
-#echo "${GREEN}Adjust the shebang...${NC}"
-#EXEC_FILE=$(find "$HOME/dxf2gcode/.venv/bin" -type f -name "dxf2gcode" | head -n 1)
-#if [ -n "$EXEC_FILE" ]; then
-#    sed -i "1s|.*|#!$HOME/dxf2gcode/.venv/bin/python|" "$EXEC_FILE"
-#else
-#    echo "${RED}Warning: Executable dxf2gcode not found in .venv/bin!${NC}"
-#fi
-
-# source löschen?
-#if [ $install_own_source -eq 1 ] ;then
-#    echo
-#    echo "${LIGHTCYAN}Should I delete the "$pfad" directory (y/N)?${NC}"
-#    read -n 1 -r answer
-#    echo
-#    if echo "$answer" | grep -iq "^y" ;then
-#        sudo rm -rf "$pfad"
-#    fi
-#fi
-
-# Icon Download
+## Icon Download
 if [ ! -f "$ICON_FILE" ]; then
     echo
     echo "${GREEN}Downloading icon…${NC}"
@@ -612,7 +697,7 @@ if [ ! -f "$ICON_FILE" ]; then
     fi
 fi
 
-# Starter
+## Starter
 # Absoluten Pfad zur ausführbaren dxf2gcode-Datei in der .venv ermitteln
 REAL_EXEC_PATH=$(find "$HOME/dxf2gcode" -type f -path "*/.venv/bin/dxf2gcode" | head -n 1)
 
@@ -632,10 +717,9 @@ rm -f "$STARTER_FILE"
 cat << EOF > "$STARTER_FILE"
 #!/bin/bash
 # dxf2gcode.sh
-# Launches dxf2gcode directly from its virtual environment
+# Starts dxf2gcode with the Qt version selected by the installer.
 
-# Run the program using the Python interpreter from the venv
-# and passes on all provided arguments ("$@")
+export DXF2GCODE_QT="$QT_VERSION"
 exec "$REAL_EXEC_PATH" "\$@"
 EOF
 
