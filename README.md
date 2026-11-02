@@ -1,4 +1,4 @@
-## This repo is only for tests with the install.sh script!
+## This installer is currently still in the development phase!
 ## Do not use on production systems!
 
 ```
