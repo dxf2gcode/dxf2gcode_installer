@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.6 #"
+echo "# dxf2gcode Install Script V6.7 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -46,15 +46,32 @@ BACKUP_TMPDIR=$(mktemp -d)
 
 ## Exit mit Restore
 exit_restore() {
+    local backup="$BACKUP_TMPDIR/dxf2gcode"
+    local restore_failed=false
+
+    # Einen bereits laufenden ERR-Trap nicht erneut auslösen.
+    trap - ERR
+    set +e
+
     rm -rf "$HOME/dxf2gcode"
-    set -e
-    if [ -d "$BACKUP_TMPDIR/dxf2gcode" ]; then
-        echo "${GREEN}Restoring $BACKUP_TMPDIR/dxf2gcode...${NC}"
-        mv "$BACKUP_TMPDIR/dxf2gcode" "$HOME/dxf2gcode"
+
+    if [ -d "$backup" ]; then
+        echo "${GREEN}Restoring backup from $backup...${NC}"
+
+        if ! mv "$backup" "$HOME/dxf2gcode"; then
+            echo "${RED}Error: Could not restore the backup. It is still available at: $backup${NC}"
+            restore_failed=true
+        fi
     else
         echo "${GREEN}No backup found. Nothing to restore.${NC}"
     fi
-    rm -rf "$BACKUP_TMPDIR"
+
+    if [ "$restore_failed" = false ]; then
+        rm -rf "$BACKUP_TMPDIR"
+    else
+        echo "${RED}Temporary backup directory was kept: $BACKUP_TMPDIR${NC}"
+    fi
+
     exit 1
 }
 
@@ -93,7 +110,12 @@ if [ "$MAJOR" -lt "$REQUIRED_MAJOR" ] || { [ "$MAJOR" -eq "$REQUIRED_MAJOR" ] &&
 fi
 
 ## Aktion bei existierender Installation
-if [ -d "$HOME/dxf2gcode" ]; then
+if [ -e "$HOME/dxf2gcode" ] || [ -L "$HOME/dxf2gcode" ]; then
+    if [ ! -d "$HOME/dxf2gcode" ]; then
+        echo "${RED}Error: $HOME/dxf2gcode exists but is not a directory.${NC}"
+        exit 1
+    fi
+
     echo "${LIGHTCYAN}$HOME/dxf2gcode directory exists."
     
     while true; do
@@ -105,26 +127,47 @@ if [ -d "$HOME/dxf2gcode" ]; then
         case "$choice" in
             [Oo])
                 echo "Overwrite selected. Existing directory will be deleted..."
-                mv "$HOME/dxf2gcode" "$BACKUP_TMPDIR"
+                if ! mv "$HOME/dxf2gcode" "$BACKUP_TMPDIR"; then
+                    echo "${RED}Error: Could not move the existing installation to the backup.${NC}"
+                    rm -rf "$BACKUP_TMPDIR"
+                    exit 1
+                fi
                 echo "${GREEN}Backup in $BACKUP_TMPDIR ${NC}"
                 break
                 ;;
             [Rr])
                 while true; do
-                    cp -a "$HOME/dxf2gcode" "$BACKUP_TMPDIR/"
-
-                    echo "Rename selected. Please enter a new name for the old installation (instead of dxf2gcode. Eg. dxf2gcode.bak):"
+                    echo "Enter a new name for the old installation (e.g. dxf2gcode.bak):"
                     read -r new_name
                     echo
 
-                    if [ -e "$HOME/$new_name" ]; then
-                        echo "${RED}Error: That name already exists!${NC}"
-                    elif [ -z "$new_name" ] || [ "$new_name" = "dxf2gcode" ]; then
-                        echo "${RED}Error: The name cannot be empty or identical!${NC}"
-                    else
-                        mv "$HOME/dxf2gcode" "$HOME/$new_name"
-                        break 2
+                    if [ -z "$new_name" ] ||
+                       [ "$new_name" = "dxf2gcode" ] ||
+                       [ "$new_name" = "." ] ||
+                       [ "$new_name" = ".." ] ||
+                       [[ "$new_name" == */* ]]; then
+                        echo "${RED}Error: Enter a valid name without slashes.${NC}"
+                        continue
                     fi
+
+                    if [ -e "$HOME/$new_name" ] || [ -L "$HOME/$new_name" ]; then
+                        echo "${RED}Error: That name already exists!${NC}"
+                        continue
+                    fi
+
+                    if ! cp -a "$HOME/dxf2gcode" "$BACKUP_TMPDIR/"; then
+                        echo "${RED}Error: Could not copy the existing installation to the backup directory.${NC}"
+                        rm -rf "$BACKUP_TMPDIR"
+                        exit 1
+                    fi
+
+                    if ! mv "$HOME/dxf2gcode" "$HOME/$new_name"; then
+                        echo "${RED}Error: Could not rename the existing installation.${NC}"
+                        rm -rf "$BACKUP_TMPDIR"
+                        exit 1
+                    fi
+
+                    break 2
                 done
                 ;;
 
@@ -141,7 +184,10 @@ fi
 
 ## Installations Routine
 
-mkdir "$HOME/dxf2gcode"
+if ! mkdir "$HOME/dxf2gcode"; then
+    echo "${RED}Error: Could not create $HOME/dxf2gcode.${NC}"
+    exit_restore
+fi
 
 install_own_source=0
 
@@ -295,6 +341,7 @@ select_source_dir() {
                         rm -rf "$own_path"
                         mkdir -p "$own_path"
                         cp -r "$pfad/." "$own_path"
+                        rm -rf "$own_path/.venv"
                         pfad="$own_path"
                         cd "$pfad" || {
                             echo "${RED}Error: Could not change to directory $pfad.${NC}"
@@ -384,9 +431,11 @@ path.write_text(source, encoding="utf-8")
 PY
 }
 
-install_debian() {
+ready_for_install() {
     echo
-    echo "${LIGHTCYAN}Ready to install? (y = Yes / q = Quit installer)?${NC}"
+    echo "${LIGHTCYAN}The installer will refresh package lists and install required dependencies."
+    echo "On Arch Linux, installed system packages will also be updated."
+    echo "Ready to install? (y = Yes / q = Quit installer)?${NC}"
     while true; do
         read -n 1 -r answer
         echo
@@ -398,8 +447,13 @@ install_debian() {
             exit_restore
         fi
     done
+}
 
-    set -e
+install_debian() {
+    ready_for_install
+
+    set -Ee
+    trap 'exit_restore' ERR
 
     echo "${GREEN}Update system...${NC}"
     sudo "$aptversion" update
@@ -418,9 +472,6 @@ install_debian() {
     echo
     echo "${GREEN}Install dependencies...${NC}"
     echo
-
-    set -Ee
-    trap 'exit_restore' ERR
 
     sudo "$aptversion" install -y python3-venv
 
@@ -491,11 +542,12 @@ install_debian() {
     }
 
     echo
-    echo "BUILD_DIR: $BUILD_DIR"
+    echo "${GREEN}Build directory: $BUILD_DIR ${NC}"
     echo
 
     # Virtuelle Umgebung erstellen und aktivieren
     echo "${GREEN}Create and activate virtual environment...${NC}"
+    rm -rf "$BUILD_DIR/.venv"
     "$pyversion" -m venv .venv
     source .venv/bin/activate
 
@@ -577,15 +629,18 @@ PY
     "$pyversion" tools/build/translations.py --no-pylupdate
 
     echo "${GREEN}Build and install wheel...${NC}"
+    rm -f dist/*.whl
     "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
-    "$pipversion" install dist/*.whl
+    "$pipversion" install --force-reinstall dist/*.whl
 }
 
 install_arch() {
-    sudo pacman -Syu
+    ready_for_install
 
     set -Ee
     trap 'exit_restore' ERR
+
+    sudo pacman -Syu
 
     local QT5_PACKAGES=(qt5-base qt5-tools)
     local QT6_PACKAGES=(qt6-base qt6-tools)
@@ -627,10 +682,11 @@ install_arch() {
     cd "$BUILD_DIR"
 
     echo
-    echo "BUILD_DIR: $BUILD_DIR"
+    echo "${GREEN}Build directory: $BUILD_DIR ${NC}"
     echo
 
     echo "${GREEN}Create and activate virtual environment...${NC}"
+    rm -rf "$BUILD_DIR/.venv"
     "$pyversion" -m venv .venv
     source .venv/bin/activate
 
@@ -656,8 +712,9 @@ install_arch() {
     "$pyversion" tools/build/translations.py --no-pylupdate
 
     echo "${GREEN}Build and install wheel...${NC}"
+    rm -f dist/*.whl
     "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
-    "$pipversion" install dist/*.whl
+    "$pipversion" install --force-reinstall dist/*.whl
 }
 
 install_other() {
@@ -709,8 +766,15 @@ fi
 echo "${GREEN}Determined binary path for starter: $REAL_EXEC_PATH${NC}"
 
 # Alten Starter löschen
+
 echo
 echo "${GREEN}Build the $STARTER_FILE file...${NC}"
+
+if [ -z "$REAL_EXEC_PATH" ] || [ ! -x "$REAL_EXEC_PATH" ]; then
+    echo "${RED}Error: Executable dxf2gcode was not found.${NC}"
+    exit_restore
+fi
+
 rm -f "$STARTER_FILE"
 
 # Starter erstellen
