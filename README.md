@@ -3,7 +3,7 @@
 
 ```
 #################################
-# dxf2gcode Install Script V6.7 #
+# dxf2gcode Install Script V6.8 #
 #   for Debian & Arch based OS  #
 #      by Daniel Luginbuehl     #
 #   webmaster@ltspiceusers.ch   #
