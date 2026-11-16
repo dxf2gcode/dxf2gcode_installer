@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.7 #"
+echo "# dxf2gcode Install Script V6.8 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -43,6 +43,8 @@ LIGHTCYAN=$'\033[1;36m'
 NC=$'\033[0m'
 
 BACKUP_TMPDIR=$(mktemp -d)
+
+FORCE_QT6=false
 
 ## Exit mit Restore
 exit_restore() {
@@ -441,6 +443,20 @@ ready_for_install() {
         echo
         if echo "$answer" | grep -iq "^y" ;then
             echo ""
+            
+            # Neue Abfrage für Qt6
+            echo -e "${LIGHTCYAN}Do you want to force Qt6 instead of Qt5? (y = Yes / Enter = Keep default Qt5)?${NC}"
+            read -n 1 -r qt_answer
+            if echo "$qt_answer" | grep -iq "^y"; then
+                FORCE_QT6="true"
+                echo
+                echo "${GREEN}Qt6 installation forced.${NC}"
+            else
+                FORCE_QT6="false"
+                echo
+                echo "${GREEN}Using default Qt5 package selection.${NC}"
+            fi
+            
             break
         fi
         if echo "$answer" | grep -iq "^q" ;then
@@ -509,7 +525,7 @@ install_debian() {
     )
 
     # Qt5 bevorzugen; Qt6 nur verwenden, wenn der Qt5-Werkzeugsatz fehlt.
-    if package_set_available "${QT5_PACKAGES[@]}"; then
+    if [ "$FORCE_QT6" != "true" ] && package_set_available "${QT5_PACKAGES[@]}"; then
         QT_VERSION=5
         sudo "$aptversion" install -y \
             "${QT5_PACKAGES[@]}" \
@@ -645,7 +661,7 @@ install_arch() {
     local QT5_PACKAGES=(qt5-base qt5-tools)
     local QT6_PACKAGES=(qt6-base qt6-tools)
 
-    if arch_package_set_available "${QT5_PACKAGES[@]}"; then
+    if [ "$FORCE_QT6" != "true" ] && arch_package_set_available "${QT5_PACKAGES[@]}"; then
         QT_VERSION=5
         sudo pacman -S --needed --noconfirm \
             "${QT5_PACKAGES[@]}" libxcb unzip wget git
