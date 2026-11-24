@@ -788,7 +788,7 @@ install_arch() {
     else
         sudo pacman -S --needed --noconfirm \
             "${QT6_PACKAGES[@]}" libxcb unzip wget git
-        export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
+        export PATH="/usr/lib/qt6:/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
     fi
 
     echo "${GREEN}Qt ${QT_VERSION} selected.${NC}"
