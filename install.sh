@@ -2,7 +2,7 @@
 
 echo ""
 echo "#################################"
-echo "# dxf2gcode Install Script V6.8 #"
+echo "# dxf2gcode Install Script V6.9 #"
 echo "#   for Debian & Arch based OS  #"
 echo "#      by Daniel Luginbuehl     #"
 echo "#   webmaster@ltspiceusers.ch   #"
@@ -44,7 +44,7 @@ NC=$'\033[0m'
 
 BACKUP_TMPDIR=$(mktemp -d)
 
-FORCE_QT6=false
+INSTALL_QT6=true
 
 ## Exit mit Restore
 exit_restore() {
@@ -444,17 +444,17 @@ ready_for_install() {
         if echo "$answer" | grep -iq "^y" ;then
             echo ""
             
-            # Neue Abfrage für Qt6
-            echo -e "${LIGHTCYAN}Do you want to force Qt6 instead of Qt5? (y = Yes / Enter = Keep default Qt5)?${NC}"
+            # Abfrage für Qt5/Qt6
+            echo -e "${LIGHTCYAN}Prefer Qt5 over Qt6? (y = prefer Qt5 / Enter = prefer Qt6)${NC}"
             read -n 1 -r qt_answer
             if echo "$qt_answer" | grep -iq "^y"; then
-                FORCE_QT6="true"
+                INSTALL_QT6="false"
                 echo
-                echo "${GREEN}Qt6 installation forced.${NC}"
+                echo "${GREEN}Qt5 installation selected.${NC}"
             else
-                FORCE_QT6="false"
+                INSTALL_QT6="true"
                 echo
-                echo "${GREEN}Using default Qt5 package selection.${NC}"
+                echo "${GREEN}Using default Qt6 package selection.${NC}"
             fi
             
             break
@@ -463,6 +463,109 @@ ready_for_install() {
             exit_restore
         fi
     done
+}
+
+install_built_wheel() {
+    local wheel extras_output selection requested extra extras_csv
+    local found invalid
+    local -a discovered_extras=() selectable_extras=() selected_extras=() automatic_extras=() requested_extras=()
+
+    wheel=$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)
+    if [ -z "$wheel" ]; then
+        echo "${RED}Error: Built wheel was not found.${NC}"
+        exit_restore
+    fi
+
+    if ! extras_output=$("$pyversion" - "$wheel" <<'PY'
+from email.parser import Parser
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as wheel:
+    metadata_path = next(
+        (name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")),
+        None,
+    )
+    if metadata_path is None:
+        raise SystemExit("Wheel metadata was not found.")
+    metadata = Parser().parsestr(wheel.read(metadata_path).decode("utf-8"))
+
+for extra in sorted(set(metadata.get_all("Provides-Extra", []))):
+    print(extra)
+PY
+    ); then
+        echo "${RED}Error: Could not read optional extras from the built wheel.${NC}"
+        exit_restore
+    fi
+
+    while IFS= read -r extra; do
+        [ -z "$extra" ] || discovered_extras+=("$extra")
+    done <<< "$extras_output"
+
+    # Extras managed by the installer's Qt selection are applied automatically.
+    if [ "$QT_VERSION" -eq 6 ]; then
+        for extra in "${discovered_extras[@]}"; do
+            if [ "$extra" = "qt6" ] || [ "$extra" = "view-vispy" ]; then
+                automatic_extras+=("$extra")
+            fi
+        done
+
+        if [ "${#automatic_extras[@]}" -gt 0 ]; then
+            echo "${GREEN}Qt 6 selected: installing extras: ${automatic_extras[*]}.${NC}"
+        fi
+    fi
+
+    for extra in "${discovered_extras[@]}"; do
+        case "$extra" in
+            qt6|view-vispy) ;;
+            *) selectable_extras+=("$extra") ;;
+        esac
+    done
+
+    selected_extras=("${automatic_extras[@]}")
+
+    if [ "${#selectable_extras[@]}" -gt 0 ]; then
+        echo
+        echo "${LIGHTCYAN}Additional optional project extras:${NC}"
+        for extra in "${selectable_extras[@]}"; do
+            echo "  $extra"
+        done
+
+        while true; do
+            echo "Enter extra names separated by commas (Enter = none):"
+            IFS= read -r selection
+            selection=${selection//,/ }
+            read -r -a requested_extras <<< "$selection"
+
+            selected_extras=("${automatic_extras[@]}")
+            invalid=false
+            for requested in "${requested_extras[@]}"; do
+                found=false
+                for extra in "${selectable_extras[@]}"; do
+                    if [ "$requested" = "$extra" ]; then
+                        found=true
+                        break
+                    fi
+                done
+
+                if [ "$found" = false ]; then
+                    echo "${RED}Unknown extra: $requested${NC}"
+                    invalid=true
+                elif [[ ! " ${selected_extras[*]} " =~ " $requested " ]]; then
+                    selected_extras+=("$requested")
+                fi
+            done
+
+            [ "$invalid" = false ] && break
+        done
+    fi
+
+    if [ "${#selected_extras[@]}" -gt 0 ]; then
+        extras_csv=$(IFS=,; printf '%s' "${selected_extras[*]}")
+        "$pipversion" install --force-reinstall "${wheel}[${extras_csv}]"
+    else
+        "$pipversion" install --force-reinstall "$wheel"
+    fi
 }
 
 install_debian() {
@@ -524,21 +627,27 @@ install_debian() {
         qt6-l10n-tools
     )
 
-    # Qt5 bevorzugen; Qt6 nur verwenden, wenn der Qt5-Werkzeugsatz fehlt.
-    if [ "$FORCE_QT6" != "true" ] && package_set_available "${QT5_PACKAGES[@]}"; then
+    # Qt6 bevorzugen; Qt5 verwenden, wenn der Qt6-Werkzeugsatz fehlt.
+    if [ "$INSTALL_QT6" = "true" ] && package_set_available "${QT6_PACKAGES[@]}"; then
+        QT_VERSION=6
+    elif package_set_available "${QT5_PACKAGES[@]}"; then
         QT_VERSION=5
+    elif package_set_available "${QT6_PACKAGES[@]}"; then
+        QT_VERSION=6
+    else
+        echo "${RED}Error: Qt 5 and Qt 6 build tools are unavailable.${NC}"
+        exit_restore
+    fi
+
+    if [ "$QT_VERSION" -eq 5 ]; then
         sudo "$aptversion" install -y \
             "${QT5_PACKAGES[@]}" \
             libxcb-cursor0
-    elif package_set_available "${QT6_PACKAGES[@]}"; then
-        QT_VERSION=6
+    else
         sudo "$aptversion" install -y \
             "${QT6_PACKAGES[@]}" \
             libxcb-cursor0
         export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:/usr/lib64/qt6/libexec:$PATH"
-    else
-        echo "${RED}Error: Qt 5 and Qt 6 build tools are unavailable.${NC}"
-        exit_restore
     fi
 
     echo "${GREEN}Qt ${QT_VERSION} selected.${NC}"
@@ -647,7 +756,7 @@ PY
     echo "${GREEN}Build and install wheel...${NC}"
     rm -f dist/*.whl
     "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
-    "$pipversion" install --force-reinstall dist/*.whl
+    install_built_wheel
 }
 
 install_arch() {
@@ -661,18 +770,25 @@ install_arch() {
     local QT5_PACKAGES=(qt5-base qt5-tools)
     local QT6_PACKAGES=(qt6-base qt6-tools)
 
-    if [ "$FORCE_QT6" != "true" ] && arch_package_set_available "${QT5_PACKAGES[@]}"; then
+    # Qt6 bevorzugen; Qt5 verwenden, wenn der Qt6-Werkzeugsatz fehlt.
+    if [ "$INSTALL_QT6" = "true" ] && arch_package_set_available "${QT6_PACKAGES[@]}"; then
+        QT_VERSION=6
+    elif arch_package_set_available "${QT5_PACKAGES[@]}"; then
         QT_VERSION=5
-        sudo pacman -S --needed --noconfirm \
-            "${QT5_PACKAGES[@]}" libxcb unzip wget git
     elif arch_package_set_available "${QT6_PACKAGES[@]}"; then
         QT_VERSION=6
-        sudo pacman -S --needed --noconfirm \
-            "${QT6_PACKAGES[@]}" libxcb unzip wget git
-        export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
     else
         echo "${RED}Error: Qt 5 and Qt 6 tools are unavailable in pacman repositories.${NC}"
         exit_restore
+    fi
+
+    if [ "$QT_VERSION" -eq 5 ]; then
+        sudo pacman -S --needed --noconfirm \
+            "${QT5_PACKAGES[@]}" libxcb unzip wget git
+    else
+        sudo pacman -S --needed --noconfirm \
+            "${QT6_PACKAGES[@]}" libxcb unzip wget git
+        export PATH="/usr/lib/qt6/bin:/usr/lib/qt6/libexec:$PATH"
     fi
 
     echo "${GREEN}Qt ${QT_VERSION} selected.${NC}"
@@ -730,7 +846,7 @@ install_arch() {
     echo "${GREEN}Build and install wheel...${NC}"
     rm -f dist/*.whl
     "$pipversion" wheel . --no-deps --no-build-isolation --wheel-dir dist
-    "$pipversion" install --force-reinstall dist/*.whl
+    install_built_wheel
 }
 
 install_other() {
